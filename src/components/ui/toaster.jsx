@@ -9,11 +9,16 @@ import {
 } from "@/components/ui/toast";
 
 export function Toaster() {
-  const { toasts } = useToast();
+  const { toasts, dismiss } = useToast();
+
+  // Mostriamo solo i banner d'errore (variant "destructive").
+  // Quelli di successo/informativi vengono creati comunque dall'app,
+  // ma qui li ignoriamo semplicemente senza mostrarli.
+  const errorToasts = toasts.filter((t) => t.variant === "destructive");
 
   return (
     <ToastProvider>
-      {toasts.map(function ({ id, title, description, action, ...props }) {
+      {errorToasts.map(function ({ id, title, description, action, ...props }) {
         return (
           <Toast key={id} {...props}>
             <div className="grid gap-1">
@@ -23,7 +28,7 @@ export function Toaster() {
               )}
             </div>
             {action}
-            <ToastClose />
+            <ToastClose onClick={() => dismiss(id)} />
           </Toast>
         );
       })}
