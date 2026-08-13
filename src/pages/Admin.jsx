@@ -5,6 +5,7 @@ import LanguageToggle from '@/components/shared/LanguageToggle';
 import CategoriesManager from '@/components/admin/CategoriesManager';
 import ProductsManager from '@/components/admin/ProductsManager';
 import AllergensManager from '@/components/admin/AllergensManager';
+import ProductOptionsManager from '@/components/admin/ProductOptionsManager';
 import ComandaTemplatesManager from '@/components/admin/ComandaTemplatesManager';
 import FixedMenusManager from '@/components/admin/FixedMenusManager';
 import SettingsManager from '@/components/admin/SettingsManager';
@@ -19,7 +20,7 @@ import { Link } from 'react-router-dom';
 
 function AdminContent() {
   const { t } = useLang();
-  const { categories, products, allergens, fixedMenus, comandaTemplates, settings, loading, reload } = useCatalog();
+  const { categories, products, allergens, productOptions, fixedMenus, comandaTemplates, settings, loading, reload } = useCatalog();
   const [authed, setAuthed] = useState(false);
   const [pin, setPin] = useState('');
   const [error, setError] = useState(false);
@@ -101,6 +102,7 @@ function AdminContent() {
             <TabsTrigger value="categories">{t('categories')}</TabsTrigger>
             <TabsTrigger value="products">{t('products')}</TabsTrigger>
             <TabsTrigger value="allergens">{t('allergens')}</TabsTrigger>
+            <TabsTrigger value="productoptions">{t('productOptions')}</TabsTrigger>
             <TabsTrigger value="fixedmenus">{t('fixedMenu')}</TabsTrigger>
             <TabsTrigger value="templates">{t('comandaTemplates')}</TabsTrigger>
             <TabsTrigger value="feste">{t('festeManagement')}</TabsTrigger>
@@ -111,10 +113,13 @@ function AdminContent() {
             <CategoriesManager categories={categories} reload={reload} />
           </TabsContent>
           <TabsContent value="products">
-            <ProductsManager products={products} categories={categories} allergens={allergens} reload={reload} />
+            <ProductsManager products={products} categories={categories} allergens={allergens} productOptions={productOptions} reload={reload} />
           </TabsContent>
           <TabsContent value="allergens">
             <AllergensManager allergens={allergens} reload={reload} />
+          </TabsContent>
+          <TabsContent value="productoptions">
+            <ProductOptionsManager productOptions={productOptions} reload={reload} />
           </TabsContent>
           <TabsContent value="fixedmenus">
             <FixedMenusManager fixedMenus={fixedMenus} products={products} categories={categories} reload={reload} />

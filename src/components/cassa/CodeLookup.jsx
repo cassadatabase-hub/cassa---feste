@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { base44 } from '@/api/base44Client';
+import { base44, supabase } from '@/api/base44Client';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -60,7 +60,7 @@ export default function CodeLookup({ categories, comandaTemplates, onOrderComple
     if (!orderCode) return;
     setLoading(true);
     try {
-      const { orderNumber, festaId } = await getNextOrderNumber();
+      const settings = await base44.entities.AppSettings.list('-created_date', 1);
       const items = (orderCode.cart_data?.items || []).map(item => ({
         ...item,
         name: item.name_it || item.name,
@@ -68,18 +68,17 @@ export default function CodeLookup({ categories, comandaTemplates, onOrderComple
         price: item.price,
       }));
 
-      const cashierOrder = await base44.entities.CashierOrder.create({
-        order_number: orderNumber,
-        code: orderCode.code,
-        items,
-        total: orderCode.total,
-        table_number: orderCode.table_number,
-        customer_name: orderCode.customer_name,
-        mode: 'code',
-        status: 'paid',
-        comandas_printed: true,
-        festa_id: festaId,
+      const { data: cashierOrder, error } = await supabase.rpc('create_paid_order', {
+        p_code: orderCode.code,
+        p_items: items,
+        p_total: orderCode.total,
+        p_table_number: orderCode.table_number,
+        p_customer_name: orderCode.customer_name || null,
+        p_note: null,
+        p_mode: 'code',
+        p_festa_id: settings?.[0]?.active_festa_id || '',
       });
+      if (error) throw error;
 
       await base44.entities.OrderCode.update(orderCode.id, {
         status: 'consumed',
@@ -96,16 +95,6 @@ export default function CodeLookup({ categories, comandaTemplates, onOrderComple
     } finally {
       setLoading(false);
     }
-  };
-
-  const getNextOrderNumber = async () => {
-    const settings = await base44.entities.AppSettings.list('-created_date', 1);
-    if (settings && settings[0]) {
-      const num = settings[0].next_order_number || 1;
-      await base44.entities.AppSettings.update(settings[0].id, { next_order_number: num + 1 });
-      return { orderNumber: num, festaId: settings[0].active_festa_id || '' };
-    }
-    return { orderNumber: Math.floor(Math.random() * 10000), festaId: '' };
   };
 
   const cartItems = orderCode?.cart_data?.items || [];

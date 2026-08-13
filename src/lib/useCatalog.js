@@ -5,6 +5,7 @@ export function useCatalog() {
   const [categories, setCategories] = useState([]);
   const [products, setProducts] = useState([]);
   const [allergens, setAllergens] = useState([]);
+  const [productOptions, setProductOptions] = useState([]);
   const [fixedMenus, setFixedMenus] = useState([]);
   const [comandaTemplates, setComandaTemplates] = useState([]);
   const [feste, setFeste] = useState([]);
@@ -14,10 +15,11 @@ export function useCatalog() {
   const loadAll = async () => {
     setLoading(true);
     try {
-      const [cats, prods, algs, menus, templates, sets, fests] = await Promise.all([
+      const [cats, prods, algs, opts, menus, templates, sets, fests] = await Promise.all([
         base44.entities.Category.list('sort_order', 100),
         base44.entities.Product.list('sort_order', 500),
         base44.entities.Allergen.list('sort_order', 50),
+        base44.entities.ProductOption.list('sort_order', 50),
         base44.entities.FixedMenu.list('-created_date', 50),
         base44.entities.ComandaTemplate.list('sort_order', 50),
         base44.entities.AppSettings.list('-created_date', 5),
@@ -26,6 +28,7 @@ export function useCatalog() {
       setCategories(cats || []);
       setProducts(prods || []);
       setAllergens(algs || []);
+      setProductOptions(opts || []);
       setFixedMenus((menus || []).filter(m => m.active));
       setComandaTemplates(templates || []);
       setFeste(fests || []);
@@ -42,7 +45,7 @@ export function useCatalog() {
   }, []);
 
   return {
-    categories, products, allergens, fixedMenus, comandaTemplates, settings, feste,
+    categories, products, allergens, productOptions, fixedMenus, comandaTemplates, settings, feste,
     loading, reload: loadAll
   };
 }

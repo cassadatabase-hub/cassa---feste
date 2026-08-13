@@ -19,7 +19,7 @@ import { Image } from '@/components/ui/image';
 
 function HomeContent() {
   const { t, tn, lang } = useLang();
-  const { categories, products, allergens, fixedMenus, settings, loading } = useCatalog();
+  const { categories, products, allergens, productOptions, fixedMenus, settings, loading } = useCatalog();
   const { items, total, addItem } = useCart();
   const [activeCat, setActiveCat] = useState(null);
   const [search, setSearch] = useState('');
@@ -86,8 +86,9 @@ function HomeContent() {
     ? products.filter(p => p.name_it?.toLowerCase().includes(search.toLowerCase()) || p.name_en?.toLowerCase().includes(search.toLowerCase()))
     : products.filter(p => p.category_id === activeCat);
 
-  const availableProducts = filteredProducts.filter(p => p.available !== false);
-  const soldOutProducts = filteredProducts.filter(p => p.available === false);
+  const isOutOfStock = (p) => p.stock_enabled && (p.stock_quantity ?? 0) <= 0;
+  const availableProducts = filteredProducts.filter(p => p.available !== false && !isOutOfStock(p));
+  const soldOutProducts = filteredProducts.filter(p => p.available === false || isOutOfStock(p));
 
   if (loading) {
     return (
@@ -190,8 +191,20 @@ function HomeContent() {
           <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
             {availableProducts.map(product => {
               const hasImage = !!product.image_url;
+              const activeOptions = (product.option_ids || [])
+                .map(oid => productOptions.find(o => o.id === oid))
+                .filter(Boolean);
+              const lowStock = product.stock_enabled && product.stock_quantity != null && product.stock_quantity > 0 && product.stock_quantity <= 5;
               return (
-                <div key={product.id} className="bg-white rounded-xl border overflow-hidden flex flex-col hover:shadow-lg hover:-translate-y-0.5 transition group">
+                <div key={product.id} className={cn(
+                  "bg-white rounded-xl border overflow-hidden flex flex-col hover:shadow-lg hover:-translate-y-0.5 transition group relative",
+                  product.is_new && "ring-2 ring-violet-400"
+                )}>
+                  {product.is_new && (
+                    <span className="absolute top-1.5 left-1.5 z-10 bg-violet-600 text-white text-[10px] font-bold px-2 py-0.5 rounded-full shadow flex items-center gap-0.5 animate-pulse">
+                      ✨ {t('isNewLabel')}
+                    </span>
+                  )}
                   {hasImage && (
                     <div className="relative aspect-[4/3] overflow-hidden bg-gray-100">
                       <Image
@@ -208,6 +221,18 @@ function HomeContent() {
                     </div>
                     {(product.description_it || product.description_en) && (
                       <p className="text-xs text-muted-foreground mt-0.5 line-clamp-2 flex-1">{tn(product.description_it, product.description_en)}</p>
+                    )}
+                    {activeOptions.length > 0 && (
+                      <div className="flex flex-wrap gap-1 mt-1.5">
+                        {activeOptions.map(o => (
+                          <span key={o.id} className="text-[10px] bg-violet-50 border border-violet-200 text-violet-700 rounded px-1.5 py-0.5 flex items-center gap-0.5">
+                            {o.icon} {tn(o.name_it, o.name_en)}
+                          </span>
+                        ))}
+                      </div>
+                    )}
+                    {lowStock && (
+                      <p className="text-[11px] font-semibold text-orange-600 mt-1">{t('lastPortionsLabel')}: {product.stock_quantity}</p>
                     )}
                     <div className="flex items-center justify-between mt-2">
                       <span className="text-base font-bold text-orange-600">{formatPrice(product.price)}</span>

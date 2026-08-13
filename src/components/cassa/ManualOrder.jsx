@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { base44 } from '@/api/base44Client';
+import { base44, supabase } from '@/api/base44Client';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -77,26 +77,21 @@ export default function ManualOrder({ categories, products, comandaTemplates }) 
     setLoading(true);
     try {
       const settings = await base44.entities.AppSettings.list('-created_date', 1);
-      let orderNumber = 1;
-      if (settings && settings[0]) {
-        orderNumber = settings[0].next_order_number || 1;
-        await base44.entities.AppSettings.update(settings[0].id, { next_order_number: orderNumber + 1 });
-      }
       const items = cart.map(item => ({
         ...item,
         name: item.name_it,
       }));
-      const order = await base44.entities.CashierOrder.create({
-        order_number: orderNumber,
-        items,
-        total,
-        table_number: tableNumber,
-        note,
-        mode: 'manual',
-        status: 'paid',
-        comandas_printed: true,
-        festa_id: settings[0]?.active_festa_id || '',
+      const { data: order, error } = await supabase.rpc('create_paid_order', {
+        p_code: null,
+        p_items: items,
+        p_total: total,
+        p_table_number: tableNumber,
+        p_customer_name: null,
+        p_note: note || null,
+        p_mode: 'manual',
+        p_festa_id: settings?.[0]?.active_festa_id || '',
       });
+      if (error) throw error;
       setCompletedOrder(order);
       setCart([]);
       setTableNumber('');
@@ -109,7 +104,11 @@ export default function ManualOrder({ categories, products, comandaTemplates }) 
     }
   };
 
-  const filteredProducts = products.filter(p => p.category_id === activeCat && p.available !== false);
+  const filteredProducts = products.filter(p =>
+    p.category_id === activeCat &&
+    p.available !== false &&
+    !(p.stock_enabled && (p.stock_quantity ?? 0) <= 0)
+  );
 
   return (
     <>

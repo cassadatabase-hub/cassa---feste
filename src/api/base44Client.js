@@ -15,6 +15,7 @@ const ENTITY_TO_TABLE = {
   Category: 'categories',
   Product: 'products',
   Allergen: 'allergens',
+  ProductOption: 'product_options',
   FixedMenu: 'fixed_menus',
   ComandaTemplate: 'comanda_templates',
   Festa: 'feste',
@@ -34,6 +35,7 @@ function parseSortString(sort) {
   }
   return { field, ascending };
 }
+
 
 function createEntityApi(entityName) {
   const table = ENTITY_TO_TABLE[entityName];
