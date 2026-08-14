@@ -10,7 +10,7 @@ import { useToast } from '@/components/ui/use-toast';
 import ComandaPrint from '@/components/cassa/ComandaPrint';
 import ReceiptPrint from '@/components/cassa/ReceiptPrint';
 
-export default function CodeLookup({ categories, comandaTemplates, onOrderCompleted }) {
+export default function CodeLookup({ categories, comandaTemplates, productOptions = [], onOrderCompleted }) {
   const { t, tn } = useLang();
   const { toast } = useToast();
   const [code, setCode] = useState('');
@@ -20,6 +20,27 @@ export default function CodeLookup({ categories, comandaTemplates, onOrderComple
   const [showPrint, setShowPrint] = useState(false);
   const [paidOrder, setPaidOrder] = useState(null);
   const [festaName, setFestaName] = useState('');
+
+  const getOption = (id) => productOptions.find(o => o.id === id);
+
+  const renderOptionsInline = (item) => {
+    if (!item.selected_options) return null;
+    const entries = Object.entries(item.selected_options).filter(([, v]) => !!v);
+    if (entries.length === 0) return null;
+    return (
+      <div className="flex flex-wrap gap-1 mt-0.5">
+        {entries.map(([oid]) => {
+          const o = getOption(oid);
+          if (!o) return null;
+          return (
+            <span key={oid} className="text-[10px] bg-violet-50 border border-violet-200 text-violet-700 rounded px-1.5 py-0.5">
+              ✓ {o.icon} {tn(o.name_it, o.name_en)}
+            </span>
+          );
+        })}
+      </div>
+    );
+  };
 
   React.useEffect(() => {
     base44.entities.AppSettings.list('-created_date', 1).then(s => {
@@ -160,12 +181,16 @@ export default function CodeLookup({ categories, comandaTemplates, onOrderComple
             </div>
             <div className="border rounded-lg divide-y">
               {cartItems.map((item, i) => (
-                <div key={i} className="flex justify-between items-center px-3 py-2 text-sm">
-                  <div className="flex items-center gap-2">
-                    <span className="font-bold w-8">{item.quantity}x</span>
-                    <span>{item.name_it || item.name}</span>
+                <div key={i} className="flex justify-between items-start px-3 py-2 text-sm">
+                  <div className="flex items-start gap-2 flex-1 min-w-0">
+                    <span className="font-bold w-8 flex-shrink-0">{item.quantity}x</span>
+                    <div className="min-w-0">
+                      <p>{item.name_it || item.name}</p>
+                      {item.lactose_free && <p className="text-xs text-green-600 font-medium">🥛 {t('withoutLactoseLabel')}</p>}
+                      {renderOptionsInline(item)}
+                    </div>
                   </div>
-                  <span className="font-medium">{formatPrice(item.price * item.quantity)}</span>
+                  <span className="font-medium flex-shrink-0 ml-2">{formatPrice(item.price * item.quantity)}</span>
                 </div>
               ))}
             </div>
@@ -191,8 +216,8 @@ export default function CodeLookup({ categories, comandaTemplates, onOrderComple
           </CardHeader>
           <CardContent className="space-y-3">
             <p className="text-sm">{t('orderNumber')} <strong>{paidOrder.order_number}</strong> — {t('tableNumber2')} {paidOrder.table_number}</p>
-            <ReceiptPrint order={paidOrder} festaName={festaName} />
-            <ComandaPrint order={paidOrder} categories={categories} templates={comandaTemplates} />
+            <ReceiptPrint order={paidOrder} festaName={festaName} productOptions={productOptions} />
+            <ComandaPrint order={paidOrder} categories={categories} templates={comandaTemplates} singleMode={false} productOptions={productOptions} />
             <Button variant="outline" className="w-full" onClick={() => window.print()}>
               <Printer className="w-4 h-4 mr-2" />
               {t('print')}

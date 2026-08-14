@@ -1,9 +1,26 @@
 import React from 'react';
 import { formatTime, formatDate, formatPrice } from '@/lib/codeGen';
 
-export default function ReceiptPrint({ order, festaName }) {
+export default function ReceiptPrint({ order, festaName, productOptions = [] }) {
   const items = order.items || [];
   const total = order.total || 0;
+
+  const getOption = (id) => productOptions.find(o => o.id === id);
+
+  const itemDisplayName = (item) => {
+    const parts = [];
+    parts.push(item.name_it || item.name);
+    if (item.lactose_free) parts.push('(SENZA LATTOSIO)');
+    if (item.selected_options) {
+      Object.entries(item.selected_options).forEach(([oid, v]) => {
+        if (v) {
+          const o = getOption(oid);
+          if (o) parts.push(`(+ ${o.name_it || o.name_en})`);
+        }
+      });
+    }
+    return parts.join(' ');
+  };
 
   return (
     <div
@@ -50,7 +67,7 @@ export default function ReceiptPrint({ order, festaName }) {
       <div>
         {items.map((item, i) => (
           <div key={i} className="flex justify-between" style={{ marginBottom: '1px' }}>
-            <span className="flex-1">{item.quantity}x {item.name_it || item.name}{item.lactose_free ? ' (SENZA LATTOSIO)' : ''}</span>
+            <span className="flex-1">{item.quantity}x {itemDisplayName(item)}</span>
             <span className="ml-2" style={{ fontWeight: '500' }}>
               {formatPrice((item.price || 0) * (item.quantity || 1))}
             </span>

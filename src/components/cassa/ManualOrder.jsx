@@ -13,7 +13,7 @@ import ComandaPrint from '@/components/cassa/ComandaPrint';
 import ReceiptPrint from '@/components/cassa/ReceiptPrint';
 import { cn } from '@/lib/utils';
 
-export default function ManualOrder({ categories, products, comandaTemplates }) {
+export default function ManualOrder({ categories, products, comandaTemplates, productOptions = [] }) {
   const { t, tn } = useLang();
   const { toast } = useToast();
   const [activeCat, setActiveCat] = useState(null);
@@ -23,7 +23,8 @@ export default function ManualOrder({ categories, products, comandaTemplates }) 
   const [loading, setLoading] = useState(false);
   const [completedOrder, setCompletedOrder] = useState(null);
   const [festaName, setFestaName] = useState('');
-  const [lactoseProduct, setLactoseProduct] = useState(null);
+  const [optionsProduct, setOptionsProduct] = useState(null);
+  const [tempSelections, setTempSelections] = useState(/** @type {Record<string, boolean>} */ ({}));
 
   React.useEffect(() => {
     base44.entities.AppSettings.list('-created_date', 1).then(s => {
@@ -35,11 +36,31 @@ export default function ManualOrder({ categories, products, comandaTemplates }) 
     if (categories.length > 0 && !activeCat) setActiveCat(categories[0].id);
   }, [categories, activeCat]);
 
-  const addToCart = (product, lactoseFree = false) => {
+  const getOption = (id) => productOptions.find(o => o.id === id);
+
+  const optionsMatch = (a, b) => {
+    const aKeys = Object.keys(a || {});
+    const bKeys = Object.keys(b || {});
+    if (aKeys.length !== bKeys.length) return false;
+    return aKeys.every(k => a[k] === b[k]);
+  };
+
+  const addToCart = (product, opts = {}) => {
+    const { lactose_free = false, selected_options = {} } = opts;
     setCart(prev => {
-      const existing = prev.find(i => i.product_id === product.id && i.lactose_free === lactoseFree);
+      const existing = prev.find(i =>
+      i.product_id === product.id &&
+      i.lactose_free === lactose_free &&
+      optionsMatch(i.selected_options, selected_options)
+    );
       if (existing) {
-        return prev.map(i => i.product_id === product.id && i.lactose_free === lactoseFree ? { ...i, quantity: i.quantity + 1 } : i);
+        return prev.map(i =>
+          i.product_id === product.id &&
+          i.lactose_free === lactose_free &&
+          optionsMatch(i.selected_options, selected_options)
+            ? { ...i, quantity: i.quantity + 1 }
+            : i
+        );
       }
       return [...prev, {
         product_id: product.id,
@@ -47,17 +68,65 @@ export default function ManualOrder({ categories, products, comandaTemplates }) 
         name_en: product.name_en,
         price: product.price,
         category_id: product.category_id,
-        lactose_free: lactoseFree,
+        lactose_free,
+        selected_options,
         uid: Date.now() + Math.random(),
         quantity: 1,
       }];
     });
   };
 
-  const handleLactoseChoice = (lactoseFree) => {
-    if (!lactoseProduct) return;
-    addToCart(lactoseProduct, lactoseFree);
-    setLactoseProduct(null);
+  const handleOptionClick = (product) => {
+    const activeOptions = (product.option_ids || [])
+      .map(oid => getOption(oid))
+      .filter(Boolean);
+    const needsChoices = product.lactose_free_option || activeOptions.length > 0;
+    if (!needsChoices) {
+      addToCart(product, {});
+      return;
+    }
+    const defaults = { lactose_free: false };
+    activeOptions.forEach(o => { defaults[`opt_${o.id}`] = false; });
+    setTempSelections(defaults);
+    setOptionsProduct(product);
+  };
+
+  const confirmOptions = () => {
+    if (!optionsProduct) return;
+    const product = optionsProduct;
+    const lactose_free = !!tempSelections.lactose_free;
+    const selected_options = {};
+    Object.keys(tempSelections).forEach(k => {
+      if (k.startsWith('opt_')) {
+        selected_options[k.replace('opt_', '')] = !!tempSelections[k];
+      }
+    });
+    addToCart(product, { lactose_free, selected_options });
+    setOptionsProduct(null);
+    setTempSelections({});
+  };
+
+  const toggleTemp = (key, value) => {
+    setTempSelections(prev => ({ ...prev, [key]: value }));
+  };
+
+  const renderOptionsInline = (item) => {
+    if (!item.selected_options) return null;
+    const entries = Object.entries(item.selected_options).filter(([, v]) => !!v);
+    if (entries.length === 0) return null;
+    return (
+      <div className="flex flex-wrap gap-1 mt-0.5">
+        {entries.map(([oid]) => {
+        const o = getOption(oid);
+        if (!o) return null;
+        return (
+          <span key={oid} className="text-[10px] bg-violet-50 border border-violet-200 text-violet-700 rounded px-1.5 py-0.5">
+            ✓ {o.icon} {tn(o.name_it, o.name_en)}
+          </span>
+        );
+      })}
+      </div>
+    );
   };
 
   const updateQty = (uid, delta) => {
@@ -136,7 +205,7 @@ export default function ManualOrder({ categories, products, comandaTemplates }) 
             return (
               <button
                 key={product.id}
-                onClick={() => product.lactose_free_option ? setLactoseProduct(product) : addToCart(product)}
+                onClick={() => handleOptionClick(product)}
                 className={cn(
                   "text-left p-3 rounded-lg border-2 transition relative",
                   totalQty > 0 ? "border-orange-500 bg-orange-50" : "border-border bg-white hover:border-slate-400"
@@ -170,6 +239,7 @@ export default function ManualOrder({ categories, products, comandaTemplates }) 
                   <div className="flex-1 min-w-0">
                     <span className="text-sm block truncate">{tn(item.name_it, item.name_en)}</span>
                     {item.lactose_free && <span className="text-xs text-green-600 font-medium">🥛 {t('withoutLactoseLabel')}</span>}
+                    {renderOptionsInline(item)}
                   </div>
                   <div className="flex items-center gap-1">
                     <Button variant="outline" size="icon" className="h-6 w-6" onClick={() => updateQty(item.uid, -1)}>
@@ -223,8 +293,8 @@ export default function ManualOrder({ categories, products, comandaTemplates }) 
           </CardHeader>
           <CardContent className="space-y-3">
             <p className="text-sm">{t('orderNumber')} <strong>{completedOrder.order_number}</strong> — {t('tableNumber2')} {completedOrder.table_number}</p>
-            <ReceiptPrint order={completedOrder} festaName={festaName} />
-            <ComandaPrint order={completedOrder} categories={categories} templates={comandaTemplates} />
+            <ReceiptPrint order={completedOrder} festaName={festaName} productOptions={productOptions} />
+            <ComandaPrint order={completedOrder} categories={categories} templates={comandaTemplates} singleMode={false} productOptions={productOptions} />
             <Button variant="outline" className="w-full" onClick={() => window.print()}>
               <Printer className="w-4 h-4 mr-2" />
               {t('print')}
@@ -234,16 +304,63 @@ export default function ManualOrder({ categories, products, comandaTemplates }) 
         </Card>
       )}
 
-      {lactoseProduct && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4" onClick={() => setLactoseProduct(null)}>
+      {optionsProduct && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4" onClick={() => setOptionsProduct(null)}>
           <div className="bg-white rounded-2xl p-6 max-w-sm w-full space-y-4" onClick={e => e.stopPropagation()}>
-            <h3 className="font-bold text-lg">{t('lactoseFreeChoice')}</h3>
-            <p className="text-sm text-muted-foreground">{tn(lactoseProduct.name_it, lactoseProduct.name_en)}</p>
-            <div className="flex gap-2">
-              <Button className="flex-1" onClick={() => handleLactoseChoice(false)}>{t('withLactose')}</Button>
-              <Button variant="outline" className="flex-1 border-green-500 text-green-600 hover:bg-green-50" onClick={() => handleLactoseChoice(true)}>{t('withoutLactose')}</Button>
+            <h3 className="font-bold text-lg">{t('optionsChoice')}</h3>
+            <p className="text-sm text-muted-foreground font-medium">{tn(optionsProduct.name_it, optionsProduct.name_en)}</p>
+            <div className="space-y-3">
+              {optionsProduct.lactose_free_option && (
+                <div className="space-y-1.5">
+                  <p className="text-xs font-semibold text-slate-700">🥛 {t('lactoseFreeChoice')}</p>
+                  <div className="flex gap-2">
+                    <Button
+                      variant={tempSelections.lactose_free ? 'outline' : 'default'}
+                      className={cn('flex-1', !tempSelections.lactose_free && 'bg-slate-700 hover:bg-slate-800')}
+                      onClick={() => toggleTemp('lactose_free', false)}
+                    >
+                      {t('withLactose')}
+                    </Button>
+                    <Button
+                      variant={tempSelections.lactose_free ? 'default' : 'outline'}
+                      className={cn('flex-1', tempSelections.lactose_free ? 'bg-green-600 hover:bg-green-700 border-green-600' : 'border-green-500 text-green-600 hover:bg-green-50')}
+                      onClick={() => toggleTemp('lactose_free', true)}
+                    >
+                      {t('withoutLactose')}
+                    </Button>
+                  </div>
+                </div>
+              )}
+              {(optionsProduct.option_ids || [])
+                .map(oid => getOption(oid))
+                .filter(Boolean)
+                .map(o => (
+                  <div key={o.id} className="space-y-1.5">
+                    <p className="text-xs font-semibold text-slate-700">{o.icon} {tn(o.name_it, o.name_en)}</p>
+                    <div className="flex gap-2">
+                      <Button
+                        variant={tempSelections[`opt_${o.id}`] ? 'outline' : 'default'}
+                        className={cn('flex-1', !tempSelections[`opt_${o.id}`] && 'bg-slate-700 hover:bg-slate-800')}
+                        onClick={() => toggleTemp(`opt_${o.id}`, false)}
+                      >
+                        {t('noOption')}
+                      </Button>
+                      <Button
+                        variant={tempSelections[`opt_${o.id}`] ? 'default' : 'outline'}
+                        className={cn('flex-1', tempSelections[`opt_${o.id}`] ? 'bg-violet-600 hover:bg-violet-700 border-violet-600' : 'border-violet-500 text-violet-600 hover:bg-violet-50')}
+                        onClick={() => toggleTemp(`opt_${o.id}`, true)}
+                      >
+                        {t('yesOption')}
+                      </Button>
+                    </div>
+                  </div>
+                ))
+              }
             </div>
-            <Button variant="ghost" className="w-full" onClick={() => setLactoseProduct(null)}>{t('cancel')}</Button>
+            <div className="flex gap-2 pt-2">
+              <Button variant="ghost" className="flex-1" onClick={() => setOptionsProduct(null)}>{t('cancel')}</Button>
+              <Button className="flex-1 bg-green-600 hover:bg-green-700" onClick={confirmOptions}>{t('confirm')}</Button>
+            </div>
           </div>
         </div>
       )}

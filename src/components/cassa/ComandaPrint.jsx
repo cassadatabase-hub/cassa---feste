@@ -7,7 +7,7 @@ const FONT_FAMILY_MAP = {
   'serif': 'ui-serif, Georgia, Cambria, "Times New Roman", serif',
 };
 
-export default function ComandaPrint({ order, categories, templates, singleMode }) {
+export default function ComandaPrint({ order, categories, templates, singleMode, productOptions = [] }) {
   // Group items by category
   const itemsByCategory = {};
   (order.items || []).forEach(item => {
@@ -15,6 +15,23 @@ export default function ComandaPrint({ order, categories, templates, singleMode 
     if (!itemsByCategory[catId]) itemsByCategory[catId] = [];
     itemsByCategory[catId].push(item);
   });
+
+  const getOption = (id) => productOptions.find(o => o.id === id);
+
+  const itemDisplayName = (item) => {
+    const parts = [];
+    parts.push(item.name_it || item.name);
+    if (item.lactose_free) parts.push('(SENZA LATTOSIO)');
+    if (item.selected_options) {
+      Object.entries(item.selected_options).forEach(([oid, v]) => {
+        if (v) {
+          const o = getOption(oid);
+          if (o) parts.push(`(+ ${o.name_it || o.name_en})`);
+        }
+      });
+    }
+    return parts.join(' ');
+  };
 
   // Determine which comandas to print
   let comandas = [];
@@ -59,7 +76,7 @@ export default function ComandaPrint({ order, categories, templates, singleMode 
           const cat = categories.find(c => c.id === cid);
           const items = itemsByCategory[cid] || [];
           return items.map(item => ({
-            name: (item.name_it || item.name) + (item.lactose_free ? ' (SENZA LATTOSIO)' : ''),
+            name: itemDisplayName(item),
             quantity: item.quantity || 1,
             categoryName: cat ? cat.name_it : '',
           }));

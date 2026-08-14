@@ -28,7 +28,8 @@ function HomeContent() {
   const [onboardingOpen, setOnboardingOpen] = useState(false);
   const [pendingOpen, setPendingOpen] = useState(false);
   const [wizardMenu, setWizardMenu] = useState(null);
-  const [lactoseProduct, setLactoseProduct] = useState(null);
+  const [optionsProduct, setOptionsProduct] = useState(null);
+  const [tempSelections, setTempSelections] = useState(/** @type {Record<string, boolean>} */ ({}));
 
   useEffect(() => {
     if (!loading && categories.length > 0 && !activeCat) {
@@ -52,8 +53,15 @@ function HomeContent() {
   }, [items.length]);
 
   const handleAddToCart = (product, type = 'ala_carte') => {
-    if (product.lactose_free_option) {
-      setLactoseProduct(product);
+    const activeOptions = (product.option_ids || [])
+      .map(oid => productOptions.find(o => o.id === oid))
+      .filter(Boolean);
+    const needsChoices = product.lactose_free_option || activeOptions.length > 0;
+    if (needsChoices) {
+      const defaults = { lactose_free: false };
+      activeOptions.forEach(o => { defaults[`opt_${o.id}`] = false; });
+      setTempSelections(defaults);
+      setOptionsProduct({ product, type });
       return;
     }
     addItem({
@@ -67,19 +75,33 @@ function HomeContent() {
     });
   };
 
-  const handleLactoseChoice = (lactoseFree) => {
-    if (!lactoseProduct) return;
-    addItem({
-      product_id: lactoseProduct.id,
-      name_it: lactoseProduct.name_it,
-      name_en: lactoseProduct.name_en,
-      price: lactoseProduct.price,
-      category_id: lactoseProduct.category_id,
-      type: 'ala_carte',
-      quantity: 1,
-      lactose_free: lactoseFree,
+  const confirmOptions = () => {
+    if (!optionsProduct) return;
+    const { product, type } = optionsProduct;
+    const lactose_free = !!tempSelections.lactose_free;
+    const selected_options = {};
+    Object.keys(tempSelections).forEach(k => {
+      if (k.startsWith('opt_')) {
+        selected_options[k.replace('opt_', '')] = !!tempSelections[k];
+      }
     });
-    setLactoseProduct(null);
+    addItem({
+      product_id: product.id,
+      name_it: product.name_it,
+      name_en: product.name_en,
+      price: product.price,
+      category_id: product.category_id,
+      type,
+      quantity: 1,
+      lactose_free,
+      selected_options,
+    });
+    setOptionsProduct(null);
+    setTempSelections({});
+  };
+
+  const toggleTemp = (key, value) => {
+    setTempSelections(prev => ({ ...prev, [key]: value }));
   };
 
   const filteredProducts = search
@@ -113,7 +135,7 @@ function HomeContent() {
             </div>
           </div>
           <div className="flex items-center gap-2">
-            <PrivacyDialog />
+            <PrivacyDialog trigger={undefined} />
             <LanguageToggle />
             <div className="flex gap-1">
               <Link to="/cassa" className="px-2 py-1 text-xs font-medium text-muted-foreground hover:text-foreground border rounded-lg">
@@ -236,7 +258,7 @@ function HomeContent() {
                     )}
                     <div className="flex items-center justify-between mt-2">
                       <span className="text-base font-bold text-orange-600">{formatPrice(product.price)}</span>
-                      <AllergenDialog product={product} allergens={allergens} />
+                      <AllergenDialog product={product} allergens={allergens} children={undefined} />
                     </div>
                     <Button size="sm" className="w-full mt-2 h-8 bg-orange-600 hover:bg-orange-700" onClick={() => handleAddToCart(product)}>
                       {t('addToCart')}
@@ -282,7 +304,7 @@ function HomeContent() {
       )}
 
       {/* Cart drawer */}
-      <CartDrawer open={cartOpen} onOpenChange={setCartOpen} onCheckout={() => { setCartOpen(false); setCheckoutOpen(true); }} />
+      <CartDrawer open={cartOpen} onOpenChange={setCartOpen} onCheckout={() => { setCartOpen(false); setCheckoutOpen(true); }} productOptions={productOptions} />
 
       {/* Checkout dialog */}
       <CheckoutDialog open={checkoutOpen} onClose={() => setCheckoutOpen(false)} onClear={() => { setCartOpen(false); }} settings={settings} />
@@ -309,17 +331,64 @@ function HomeContent() {
         <FixedMenuWizard menu={wizardMenu} products={products} onClose={() => setWizardMenu(null)} />
       )}
 
-      {/* Lactose choice dialog */}
-      {lactoseProduct && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4" onClick={() => setLactoseProduct(null)}>
+      {/* Options choice dialog */}
+      {optionsProduct && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4" onClick={() => setOptionsProduct(null)}>
           <div className="bg-white rounded-2xl p-6 max-w-sm w-full space-y-4" onClick={e => e.stopPropagation()}>
-            <h3 className="font-bold text-lg">{t('lactoseFreeChoice')}</h3>
-            <p className="text-sm text-muted-foreground">{tn(lactoseProduct.name_it, lactoseProduct.name_en)}</p>
-            <div className="flex gap-2">
-              <Button className="flex-1" onClick={() => handleLactoseChoice(false)}>{t('withLactose')}</Button>
-              <Button variant="outline" className="flex-1 border-green-500 text-green-600 hover:bg-green-50" onClick={() => handleLactoseChoice(true)}>{t('withoutLactose')}</Button>
+            <h3 className="font-bold text-lg">{t('optionsChoice')}</h3>
+            <p className="text-sm text-muted-foreground font-medium">{tn(optionsProduct.product.name_it, optionsProduct.product.name_en)}</p>
+            <div className="space-y-3">
+              {optionsProduct.product.lactose_free_option && (
+                <div className="space-y-1.5">
+                  <p className="text-xs font-semibold text-slate-700">🥛 {t('lactoseFreeChoice')}</p>
+                  <div className="flex gap-2">
+                    <Button
+                      variant={tempSelections.lactose_free ? 'outline' : 'default'}
+                      className={cn('flex-1', !tempSelections.lactose_free && 'bg-slate-700 hover:bg-slate-800')}
+                      onClick={() => toggleTemp('lactose_free', false)}
+                    >
+                      {t('withLactose')}
+                    </Button>
+                    <Button
+                      variant={tempSelections.lactose_free ? 'default' : 'outline'}
+                      className={cn('flex-1', tempSelections.lactose_free ? 'bg-green-600 hover:bg-green-700 border-green-600' : 'border-green-500 text-green-600 hover:bg-green-50')}
+                      onClick={() => toggleTemp('lactose_free', true)}
+                    >
+                      {t('withoutLactose')}
+                    </Button>
+                  </div>
+                </div>
+              )}
+              {(optionsProduct.product.option_ids || [])
+                .map(oid => productOptions.find(o => o.id === oid))
+                .filter(Boolean)
+                .map(o => (
+                  <div key={o.id} className="space-y-1.5">
+                    <p className="text-xs font-semibold text-slate-700">{o.icon} {tn(o.name_it, o.name_en)}</p>
+                    <div className="flex gap-2">
+                      <Button
+                        variant={tempSelections[`opt_${o.id}`] ? 'outline' : 'default'}
+                        className={cn('flex-1', !tempSelections[`opt_${o.id}`] && 'bg-slate-700 hover:bg-slate-800')}
+                        onClick={() => toggleTemp(`opt_${o.id}`, false)}
+                      >
+                        {t('noOption')}
+                      </Button>
+                      <Button
+                        variant={tempSelections[`opt_${o.id}`] ? 'default' : 'outline'}
+                        className={cn('flex-1', tempSelections[`opt_${o.id}`] ? 'bg-violet-600 hover:bg-violet-700 border-violet-600' : 'border-violet-500 text-violet-600 hover:bg-violet-50')}
+                        onClick={() => toggleTemp(`opt_${o.id}`, true)}
+                      >
+                        {t('yesOption')}
+                      </Button>
+                    </div>
+                  </div>
+                ))
+              }
             </div>
-            <Button variant="ghost" className="w-full" onClick={() => setLactoseProduct(null)}>{t('cancel')}</Button>
+            <div className="flex gap-2 pt-2">
+              <Button variant="ghost" className="flex-1" onClick={() => setOptionsProduct(null)}>{t('cancel')}</Button>
+              <Button className="flex-1 bg-orange-600 hover:bg-orange-700" onClick={confirmOptions}>{t('confirm')}</Button>
+            </div>
           </div>
         </div>
       )}

@@ -1,6 +1,6 @@
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
 
-const CartContext = createContext();
+const CartContext = createContext(undefined);
 
 const STORAGE_KEY = 'sagra_cart';
 const TABLE_KEY = 'sagra_table';
@@ -40,17 +40,30 @@ export function CartProvider({ children }) {
     localStorage.setItem('sagra_customer_name', customerName);
   }, [customerName]);
 
+  const optionsMatch = (a, b) => {
+    const aKeys = Object.keys(a || {});
+    const bKeys = Object.keys(b || {});
+    if (aKeys.length !== bKeys.length) return false;
+    return aKeys.every(k => a[k] === b[k]);
+  };
+
   const addItem = useCallback((item) => {
     setItems(prev => {
-      // For à la carte items, merge by product_id
-      // For fixed menus, always add as new line
       if (item.type === 'fixed_menu') {
         return [...prev, { ...item, uid: Date.now() + Math.random() }];
       }
-      const existing = prev.find(i => i.product_id === item.product_id && i.type === item.type && i.lactose_free === item.lactose_free);
+      const existing = prev.find(i =>
+        i.product_id === item.product_id &&
+        i.type === item.type &&
+        i.lactose_free === item.lactose_free &&
+        optionsMatch(i.selected_options, item.selected_options)
+      );
       if (existing) {
         return prev.map(i =>
-          i.product_id === item.product_id && i.type === item.type && i.lactose_free === item.lactose_free
+          i.product_id === item.product_id &&
+          i.type === item.type &&
+          i.lactose_free === item.lactose_free &&
+          optionsMatch(i.selected_options, item.selected_options)
             ? { ...i, quantity: i.quantity + (item.quantity || 1) }
             : i
         );

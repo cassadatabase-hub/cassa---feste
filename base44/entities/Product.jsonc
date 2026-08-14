@@ -20,7 +20,7 @@
     },
     "price": {
       "type": "number",
-      "title": "Prezzo (\u20ac)"
+      "title": "Prezzo (€)"
     },
     "category_id": {
       "type": "string",
@@ -41,7 +41,7 @@
     },
     "lactose_free_option": {
       "type": "boolean",
-      "title": "Possibilit\u00e0 senza lattosio",
+      "title": "Possibilità senza lattosio",
       "default": false
     },
     "image_url": {
@@ -52,6 +52,28 @@
       "type": "number",
       "title": "Ordine",
       "default": 0
+    },
+    "option_ids": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "title": "ID Opzioni prodotto",
+      "default": []
+    },
+    "is_new": {
+      "type": "boolean",
+      "title": "Novità",
+      "default": false
+    },
+    "stock_enabled": {
+      "type": "boolean",
+      "title": "Abilita tracciamento scorte",
+      "default": false
+    },
+    "stock_quantity": {
+      "type": "number",
+      "title": "Quantità disponibile"
     }
   },
   "required": [

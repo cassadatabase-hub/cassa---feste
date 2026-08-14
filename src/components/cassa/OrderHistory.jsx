@@ -9,13 +9,31 @@ import { useLang } from '@/lib/i18n';
 import { formatPrice, formatTime, formatDate } from '@/lib/codeGen';
 import ComandaPrint from '@/components/cassa/ComandaPrint';
 
-export default function OrderHistory({ categories, comandaTemplates, refreshKey, activeFestaId }) {
+export default function OrderHistory({ categories, comandaTemplates, productOptions = [], refreshKey, activeFestaId }) {
   const { t, tn } = useLang();
   const [orders, setOrders] = useState([]);
   const [loading, setLoading] = useState(true);
   const [statusFilter, setStatusFilter] = useState('all');
   const [reprintOrder, setReprintOrder] = useState(null);
   const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split('T')[0]);
+
+  const getOption = (id) => productOptions.find(o => o.id === id);
+
+  const itemSummary = (item) => {
+    let s = `${item.quantity}x ${item.name_it || item.name}`;
+    const extras = [];
+    if (item.lactose_free) extras.push('Senza Lattosio');
+    if (item.selected_options) {
+      Object.entries(item.selected_options).forEach(([oid, v]) => {
+        if (v) {
+          const o = getOption(oid);
+          if (o) extras.push(o.name_it || o.name_en);
+        }
+      });
+    }
+    if (extras.length > 0) s += ` (${extras.join(', ')})`;
+    return s;
+  };
 
   const loadOrders = async () => {
     setLoading(true);
@@ -47,7 +65,7 @@ export default function OrderHistory({ categories, comandaTemplates, refreshKey,
   const exportCsv = () => {
     const rows = [['N.', 'Ora', 'Tavolo', 'Modalità', 'Stato', 'Totale', 'Articoli']];
     orders.forEach(o => {
-      const itemsStr = (o.items || []).map(i => `${i.quantity}x ${i.name_it || i.name}`).join('; ');
+      const itemsStr = (o.items || []).map(i => itemSummary(i)).join('; ');
       rows.push([
         o.order_number || '',
         formatTime(o.created_date),
@@ -142,7 +160,7 @@ export default function OrderHistory({ categories, comandaTemplates, refreshKey,
                         {order.note && ` · ${order.note}`}
                       </p>
                       <p className="text-xs text-muted-foreground">
-                        {(order.items || []).map(i => `${i.quantity}x ${i.name_it || i.name}`).join(', ')}
+                        {(order.items || []).map(i => itemSummary(i)).join(', ')}
                       </p>
                     </div>
                   </div>
@@ -164,7 +182,7 @@ export default function OrderHistory({ categories, comandaTemplates, refreshKey,
         <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4" onClick={() => setReprintOrder(null)}>
           <div className="bg-white rounded-2xl p-4 max-w-md w-full max-h-[80vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
             <h3 className="font-bold mb-3">{t('reprint')} — {t('orderNumber')} {reprintOrder.order_number}</h3>
-            <ComandaPrint order={reprintOrder} categories={categories} templates={comandaTemplates} />
+            <ComandaPrint order={reprintOrder} categories={categories} templates={comandaTemplates} singleMode={false} productOptions={productOptions} />
             <div className="flex gap-2 mt-3">
               <Button className="flex-1" onClick={() => window.print()}>
                 <Printer className="w-4 h-4 mr-2" />

@@ -9,9 +9,30 @@ import { useCart } from '@/lib/cart';
 import { useLang } from '@/lib/i18n';
 import { formatPrice } from '@/lib/codeGen';
 
-export default function CartDrawer({ open, onOpenChange, onCheckout }) {
+export default function CartDrawer({ open, onOpenChange, onCheckout, productOptions = [] }) {
   const { items, updateQuantity, removeItem, total, alaCarteItems, fixedMenuItems, drinkItems, tableNumber, setTableNumber } = useCart();
-  const { t, tn } = useLang();
+  const { t, tn, lang } = useLang();
+
+  const getOption = (id) => productOptions.find(o => o.id === id);
+
+  const renderOptions = (item) => {
+    if (!item.selected_options) return null;
+    const entries = Object.entries(item.selected_options).filter(([, v]) => !!v);
+    if (entries.length === 0) return null;
+    return (
+      <div className="mt-1 flex flex-wrap gap-1">
+        {entries.map(([oid]) => {
+          const o = getOption(oid);
+          if (!o) return null;
+          return (
+            <span key={oid} className="text-[10px] bg-violet-50 border border-violet-200 text-violet-700 rounded px-1.5 py-0.5 flex items-center gap-0.5">
+              ✓ {o.icon} {tn(o.name_it, o.name_en)}
+            </span>
+          );
+        })}
+      </div>
+    );
+  };
 
   const renderSection = (sectionItems, title) => {
     if (sectionItems.length === 0) return null;
@@ -25,6 +46,7 @@ export default function CartDrawer({ open, onOpenChange, onCheckout }) {
               {item.lactose_free && (
                 <p className="text-xs text-green-600 font-medium">🥛 {t('withoutLactoseLabel')}</p>
               )}
+              {renderOptions(item)}
               {item.menu_items && item.menu_items.length > 0 && (
                 <div className="mt-1 space-y-0.5">
                   {item.menu_items.map((mi, i) => (
@@ -58,7 +80,7 @@ export default function CartDrawer({ open, onOpenChange, onCheckout }) {
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
       <SheetContent className="w-full sm:max-w-md flex flex-col">
-        <SheetHeader>
+        <SheetHeader className="">
           <SheetTitle className="flex items-center gap-2">
             <ShoppingCart className="w-5 h-5" />
             {t('cart')}
