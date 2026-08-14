@@ -1,4 +1,4 @@
-import React from 'react';
+import React from 'react'; 
 import { formatTime, formatDate, formatPrice } from '@/lib/codeGen';
 
 export default function ReceiptPrint({ order, festaName, productOptions = [] }) {
