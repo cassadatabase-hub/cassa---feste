@@ -40,7 +40,7 @@ export default function DailyReport({ categories, settings, reload }) {
   const loadOrders = async () => {
     setLoading(true);
     try {
-      const all = await base44.entities.CashierOrder.list('-created_date', 500);
+      const all = await base44.entities.CashierOrder.listAll('-created_date');
       let filtered = (all || []).filter(o => o.status === 'paid');
       if (selectedFestaId && selectedFestaId !== 'all') {
         filtered = filtered.filter(o => o.festa_id === selectedFestaId);

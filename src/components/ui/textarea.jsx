@@ -2,13 +2,6 @@ import * as React from "react"
 
 import { cn } from "@/lib/utils"
 
-/**
- * @typedef {{ className?: string; value?: any; onChange?: any; [key: string]: any; }} TextareaProps
- */
-
-/**
- * @param {TextareaProps} props
- */
 const Textarea = React.forwardRef(({ className, ...props }, ref) => {
   return (
     (<textarea

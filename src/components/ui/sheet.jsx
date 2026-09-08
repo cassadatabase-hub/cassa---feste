@@ -14,13 +14,6 @@ const SheetClose = SheetPrimitive.Close
 
 const SheetPortal = SheetPrimitive.Portal
 
-/**
- * @typedef {{ className?: string; [key: string]: any; }} SheetOverlayProps
- */
-
-/**
- * @param {SheetOverlayProps} props
- */
 const SheetOverlay = React.forwardRef(({ className, ...props }, ref) => (
   <SheetPrimitive.Overlay
     className={cn(
@@ -51,13 +44,6 @@ const sheetVariants = cva(
   }
 )
 
-/**
- * @typedef {{ className?: string; side?: "top" | "bottom" | "left" | "right"; children?: React.ReactNode; [key: string]: any; }} SheetContentProps
- */
-
-/**
- * @param {SheetContentProps} props
- */
 const SheetContent = React.forwardRef(({ side = "right", className, children, ...props }, ref) => (
   <SheetPortal>
     <SheetOverlay />
@@ -73,13 +59,6 @@ const SheetContent = React.forwardRef(({ side = "right", className, children, ..
 ))
 SheetContent.displayName = SheetPrimitive.Content.displayName
 
-/**
- * @typedef {{ className?: string; [key: string]: any; }} SheetHeaderProps
- */
-
-/**
- * @param {SheetHeaderProps} props
- */
 const SheetHeader = ({
   className,
   ...props
@@ -90,13 +69,6 @@ const SheetHeader = ({
 )
 SheetHeader.displayName = "SheetHeader"
 
-/**
- * @typedef {{ className?: string; [key: string]: any; }} SheetFooterProps
- */
-
-/**
- * @param {SheetFooterProps} props
- */
 const SheetFooter = ({
   className,
   ...props
@@ -107,13 +79,6 @@ const SheetFooter = ({
 )
 SheetFooter.displayName = "SheetFooter"
 
-/**
- * @typedef {{ className?: string; [key: string]: any; }} SheetTitleProps
- */
-
-/**
- * @param {SheetTitleProps} props
- */
 const SheetTitle = React.forwardRef(({ className, ...props }, ref) => (
   <SheetPrimitive.Title
     ref={ref}
@@ -122,13 +87,6 @@ const SheetTitle = React.forwardRef(({ className, ...props }, ref) => (
 ))
 SheetTitle.displayName = SheetPrimitive.Title.displayName
 
-/**
- * @typedef {{ className?: string; [key: string]: any; }} SheetDescriptionProps
- */
-
-/**
- * @param {SheetDescriptionProps} props
- */
 const SheetDescription = React.forwardRef(({ className, ...props }, ref) => (
   <SheetPrimitive.Description
     ref={ref}

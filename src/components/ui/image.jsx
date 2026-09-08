@@ -2,40 +2,6 @@ import * as React from "react"
 import { useSize } from "@/hooks/use-size"
 import { cn } from "@/lib/utils"
 
-/**
- * @typedef {Object} ImageWrapperProps
- * @property {string} [aspectRatio]
- * @property {string} [className]
- * @property {React.CSSProperties} [style]
- * @property {React.ReactNode} [children]
- */
-
-/**
- * @typedef {Object} ResponsiveImageProps
- * @property {Object} parsed
- * @property {string} [fittingType]
- * @property {{ x: number, y: number }} [focalPoint]
- * @property {number} [quality]
- * @property {string} [className]
- * @property {React.CSSProperties} [style]
- * @property {string} [aspectRatio]
- * @property {Function} [onLoad]
- * @property {any} [key: string]
- */
-
-/**
- * @typedef {Object} ImageProps
- * @property {string} [src]
- * @property {string} [fittingType]
- * @property {number} [originWidth]
- * @property {number} [originHeight]
- * @property {number} [focalPointX]
- * @property {number} [focalPointY]
- * @property {number} [quality]
- * @property {React.Ref<any>} [ref]
- * @property {any} [key: string]
- */
-
 const FALLBACK_IMAGE_URL =
   "https://static.wixstatic.com/media/12d367_4f26ccd17f8f4e3a8958306ea08c2332~mv2.png"
 
@@ -106,10 +72,6 @@ function buildSrcSet(parsed, options) {
   ).join(", ")
 }
 
-/**
- * @param {ImageWrapperProps} props
- * @param {React.Ref<any>} ref
- */
 const ImageWrapper = React.forwardRef(({ aspectRatio, className, style, children }, ref) => (
   <span
     ref={ref}
@@ -121,10 +83,6 @@ const ImageWrapper = React.forwardRef(({ aspectRatio, className, style, children
 ))
 ImageWrapper.displayName = "ImageWrapper"
 
-/**
- * @param {ResponsiveImageProps} props
- * @param {React.Ref<any>} parentRef
- */
 const ResponsiveImage = React.forwardRef(
   ({ parsed, fittingType, focalPoint, quality, className, style, aspectRatio, onLoad, ...props }, parentRef) => {
     const wrapperRef = React.useRef(null)
@@ -213,8 +171,6 @@ ResponsiveImage.displayName = "ResponsiveImage"
  * device pixel ratio) and re-encoded to WebP; `fittingType="fill"` crops
  * server-side, optionally anchored at a focal point. Other URLs render as a
  * plain <img>. Failed loads swap to a fallback image.
- * @param {ImageProps} props
- * @param {React.Ref<any>} ref
  */
 const Image = React.forwardRef(
   (

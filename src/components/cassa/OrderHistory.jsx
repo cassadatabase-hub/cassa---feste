@@ -38,7 +38,7 @@ export default function OrderHistory({ categories, comandaTemplates, productOpti
   const loadOrders = async () => {
     setLoading(true);
     try {
-      const all = await base44.entities.CashierOrder.list('-created_date', 500);
+      const all = await base44.entities.CashierOrder.listAll('-created_date');
       const filtered = (all || []).filter(o => {
         const d = new Date(o.created_date);
         const dayKey = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;

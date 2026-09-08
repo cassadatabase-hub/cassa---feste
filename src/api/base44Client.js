@@ -49,6 +49,24 @@ function createEntityApi(entityName) {
       if (error) throw error;
       return data || [];
     },
+    // Scarica TUTTE le righe della tabella, indipendentemente da quante sono,
+    // "a pagine" (di default 1000 alla volta). Da usare per report/esportazioni
+    // dove serve avere davvero tutto, senza rischiare di troncare i dati.
+    async listAll(sort, batchSize = 1000) {
+      if (!table) throw new Error(`Unknown entity: ${entityName}`);
+      const { field, ascending } = parseSortString(sort);
+      let allRows = [];
+      let from = 0;
+      while (true) {
+        const to = from + batchSize - 1;
+        const { data, error } = await supabase.from(table).select('*').order(field, { ascending }).range(from, to);
+        if (error) throw error;
+        allRows = allRows.concat(data || []);
+        if (!data || data.length < batchSize) break;
+        from += batchSize;
+      }
+      return allRows;
+    },
     async filter(filters) {
       if (!table) throw new Error(`Unknown entity: ${entityName}`);
       let q = supabase.from(table).select('*');

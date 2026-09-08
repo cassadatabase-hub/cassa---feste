@@ -14,13 +14,6 @@ const DialogPortal = DialogPrimitive.Portal
 
 const DialogClose = DialogPrimitive.Close
 
-/**
- * @typedef {{ className?: string; children?: any; [key: string]: any; }} DialogOverlayProps
- */
-
-/**
- * @param {DialogOverlayProps} props
- */
 const DialogOverlay = React.forwardRef(({ className, ...props }, ref) => (
   <DialogPrimitive.Overlay
     ref={ref}
@@ -32,13 +25,6 @@ const DialogOverlay = React.forwardRef(({ className, ...props }, ref) => (
 ))
 DialogOverlay.displayName = DialogPrimitive.Overlay.displayName
 
-/**
- * @typedef {{ className?: string; children?: any; [key: string]: any; }} DialogContentProps
- */
-
-/**
- * @param {DialogContentProps} props
- */
 const DialogContent = React.forwardRef(({ className, children, ...props }, ref) => (
   <DialogPortal>
     <DialogOverlay />
@@ -60,13 +46,6 @@ const DialogContent = React.forwardRef(({ className, children, ...props }, ref) 
 ))
 DialogContent.displayName = DialogPrimitive.Content.displayName
 
-/**
- * @typedef {{ className?: string; children?: any; [key: string]: any; }} DialogHeaderProps
- */
-
-/**
- * @param {DialogHeaderProps} props
- */
 const DialogHeader = ({
   className,
   ...props
@@ -77,13 +56,6 @@ const DialogHeader = ({
 )
 DialogHeader.displayName = "DialogHeader"
 
-/**
- * @typedef {{ className?: string; children?: any; [key: string]: any; }} DialogFooterProps
- */
-
-/**
- * @param {DialogFooterProps} props
- */
 const DialogFooter = ({
   className,
   ...props
@@ -94,13 +66,6 @@ const DialogFooter = ({
 )
 DialogFooter.displayName = "DialogFooter"
 
-/**
- * @typedef {{ className?: string; children?: any; [key: string]: any; }} DialogTitleProps
- */
-
-/**
- * @param {DialogTitleProps} props
- */
 const DialogTitle = React.forwardRef(({ className, ...props }, ref) => (
   <DialogPrimitive.Title
     ref={ref}
@@ -109,13 +74,6 @@ const DialogTitle = React.forwardRef(({ className, ...props }, ref) => (
 ))
 DialogTitle.displayName = DialogPrimitive.Title.displayName
 
-/**
- * @typedef {{ className?: string; children?: any; [key: string]: any; }} DialogDescriptionProps
- */
-
-/**
- * @param {DialogDescriptionProps} props
- */
 const DialogDescription = React.forwardRef(({ className, ...props }, ref) => (
   <DialogPrimitive.Description
     ref={ref}

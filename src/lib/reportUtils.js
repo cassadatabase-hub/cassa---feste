@@ -106,7 +106,7 @@ export function getReportFileName(festaName, formatDateFn) {
  * @returns {Promise<{success: boolean, fileUrl?: string, error?: string, orderCount: number}>}
  */
 export async function generateAndUploadFestaReport(festaId, festaName, categories, t) {
-  const all = await base44.entities.CashierOrder.list('-created_date', 500);
+  const all = await base44.entities.CashierOrder.listAll('-created_date');
   const orders = (all || []).filter(o => o.status === 'paid' && o.festa_id === festaId);
 
   if (orders.length === 0) {
