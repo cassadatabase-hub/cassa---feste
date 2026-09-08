@@ -75,21 +75,32 @@ export function buildWorkbook(report, t) {
   //   - Amaro                3       9,00 €
   //   CUCINA
   //   - Pasta al pomodoro    8      56,00 €
-  const productRows = [[t('product'), t('quantity'), t('revenue') + ' (€)']];
+  // --- Per prodotto: raggruppato per reparto, un blocco per reparto UNA SOLA VOLTA
+  // (sommato su tutto il periodo, non ripetuto giorno per giorno) così tutti gli
+  // elementi dello stesso reparto restano sempre consecutivi.
+  //   BAR
+  //   - Bibita              120     300,00 €
+  //   - Amaro                15      45,00 €
+  //   CUCINA
+  //   - Pasta al pomodoro    40     280,00 €
+  const allProducts = {};
   days.forEach(d => {
-    productRows.push([`${t('date')}: ${d}`, '', '']);
-    const dayProducts = Object.entries(byDay[d].products)
-      .sort(([, a], [, b]) => (a.catOrder - b.catOrder) || b.quantity - a.quantity);
-    // Raggruppo i prodotti già ordinati per reparto in blocchi consecutivi
-    let currentCategory = null;
-    dayProducts.forEach(([name, p]) => {
-      if (p.category !== currentCategory) {
-        currentCategory = p.category;
-        productRows.push([currentCategory.toUpperCase(), '', '']);
-      }
-      productRows.push([`- ${name}`, p.quantity, p.revenue]);
+    Object.entries(byDay[d].products).forEach(([name, p]) => {
+      if (!allProducts[name]) allProducts[name] = { quantity: 0, revenue: 0, category: p.category, catOrder: p.catOrder };
+      allProducts[name].quantity += p.quantity;
+      allProducts[name].revenue += p.revenue;
     });
-    productRows.push(['', '', '']);
+  });
+  const productRows = [[t('product'), t('quantity'), t('revenue') + ' (€)']];
+  const sortedProducts = Object.entries(allProducts)
+    .sort(([, a], [, b]) => (a.catOrder - b.catOrder) || b.quantity - a.quantity);
+  let currentCategory = null;
+  sortedProducts.forEach(([name, p]) => {
+    if (p.category !== currentCategory) {
+      currentCategory = p.category;
+      productRows.push([currentCategory.toUpperCase(), '', '']);
+    }
+    productRows.push([`- ${name}`, p.quantity, p.revenue]);
   });
   const productsWs = XLSX.utils.aoa_to_sheet(productRows);
   setColumnEuroFormat(productsWs, 2, productRows.length);
