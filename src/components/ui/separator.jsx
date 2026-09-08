@@ -3,6 +3,13 @@ import * as SeparatorPrimitive from "@radix-ui/react-separator"
 
 import { cn } from "@/lib/utils"
 
+/**
+ * @typedef {{ className?: string; orientation?: "horizontal" | "vertical"; decorative?: boolean; [key: string]: any; }} SeparatorProps
+ */
+
+/**
+ * @param {SeparatorProps} props
+ */
 const Separator = React.forwardRef((
   { className, orientation = "horizontal", decorative = true, ...props },
   ref

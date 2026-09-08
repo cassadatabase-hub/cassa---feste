@@ -5,6 +5,13 @@ import { cn } from "@/lib/utils"
 
 const Tabs = TabsPrimitive.Root
 
+/**
+ * @typedef {{ className?: string; [key: string]: any; }} TabsListProps
+ */
+
+/**
+ * @param {TabsListProps} props
+ */
 const TabsList = React.forwardRef(({ className, ...props }, ref) => (
   <TabsPrimitive.List
     ref={ref}
@@ -16,24 +23,40 @@ const TabsList = React.forwardRef(({ className, ...props }, ref) => (
 ))
 TabsList.displayName = TabsPrimitive.List.displayName
 
-const TabsTrigger = React.forwardRef(({ className, ...props }, ref) => (
+/**
+ * @typedef {{ className?: string; value?: any; [key: string]: any; }} TabsTriggerProps
+ */
+
+/**
+ * @param {TabsTriggerProps} props
+ */
+const TabsTrigger = React.forwardRef(({ className, value, ...props }, ref) => (
   <TabsPrimitive.Trigger
     ref={ref}
     className={cn(
       "inline-flex items-center justify-center whitespace-nowrap rounded-md px-3 py-1 text-sm font-medium ring-offset-background transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 data-[state=active]:bg-background data-[state=active]:text-foreground data-[state=active]:shadow",
       className
     )}
+    value={value}
     {...props} />
 ))
 TabsTrigger.displayName = TabsPrimitive.Trigger.displayName
 
-const TabsContent = React.forwardRef(({ className, ...props }, ref) => (
+/**
+ * @typedef {{ className?: string; value?: any; [key: string]: any; }} TabsContentProps
+ */
+
+/**
+ * @param {TabsContentProps} props
+ */
+const TabsContent = React.forwardRef(({ className, value, ...props }, ref) => (
   <TabsPrimitive.Content
     ref={ref}
     className={cn(
       "mt-2 ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2",
       className
     )}
+    value={value}
     {...props} />
 ))
 TabsContent.displayName = TabsPrimitive.Content.displayName
