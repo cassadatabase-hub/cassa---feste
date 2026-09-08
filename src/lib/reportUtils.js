@@ -37,51 +37,94 @@ export function computeReport(orders, categories) {
   return { byDay, days, grandTotal, totalOrders };
 }
 
+// Formato numerico italiano: virgola per i decimali, punto per le migliaia, simbolo €.
+// La formattazione la applica Excel stesso in base al valore NUMERICO reale della cella
+// (non più testo con il punto) — così funzionano anche somme e calcoli fatti in Excel.
+const EURO_FORMAT = '#,##0.00" €"';
+
+function setColumnEuroFormat(ws, colIndex, rowCount) {
+  for (let r = 0; r < rowCount; r++) {
+    const addr = XLSX.utils.encode_cell({ r, c: colIndex });
+    const cell = ws[addr];
+    if (cell && cell.t === 'n') {
+      cell.z = EURO_FORMAT;
+    }
+  }
+}
+
 export function buildWorkbook(report, t) {
   const { byDay, days, grandTotal, totalOrders } = report;
   const wb = XLSX.utils.book_new();
 
-  const summary = [
+  // --- Riepilogo giornaliero ---
+  const summaryRows = [
     [t('date'), t('orderCount'), t('revenue') + ' (€)'],
-    ...days.map(d => [d, byDay[d].orders.length, byDay[d].total.toFixed(2)]),
+    ...days.map(d => [d, byDay[d].orders.length, byDay[d].total]),
     ['', '', ''],
-    [t('grandTotal'), totalOrders, grandTotal.toFixed(2)],
+    [t('grandTotal'), totalOrders, grandTotal],
   ];
-  XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(summary), t('dailyReport'));
+  const summaryWs = XLSX.utils.aoa_to_sheet(summaryRows);
+  setColumnEuroFormat(summaryWs, 2, summaryRows.length);
+  XLSX.utils.book_append_sheet(wb, summaryWs, t('dailyReport'));
 
-  const products = [[t('date'), t('category'), t('product'), t('quantity'), t('revenue') + ' (€)']];
+  // --- Per prodotto: raggruppato per reparto, un blocco sotto l'altro ---
+  // Struttura:
+  //   Giorno: 2026-09-06
+  //   BAR
+  //   - Bibita              20      50,00 €
+  //   - Amaro                3       9,00 €
+  //   CUCINA
+  //   - Pasta al pomodoro    8      56,00 €
+  const productRows = [[t('product'), t('quantity'), t('revenue') + ' (€)']];
   days.forEach(d => {
+    productRows.push([`${t('date')}: ${d}`, '', '']);
     const dayProducts = Object.entries(byDay[d].products)
       .sort(([, a], [, b]) => (a.catOrder - b.catOrder) || b.quantity - a.quantity);
+    // Raggruppo i prodotti già ordinati per reparto in blocchi consecutivi
+    let currentCategory = null;
     dayProducts.forEach(([name, p]) => {
-      products.push([d, p.category, name, p.quantity, p.revenue.toFixed(2)]);
+      if (p.category !== currentCategory) {
+        currentCategory = p.category;
+        productRows.push([currentCategory.toUpperCase(), '', '']);
+      }
+      productRows.push([`- ${name}`, p.quantity, p.revenue]);
     });
+    productRows.push(['', '', '']);
   });
-  XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(products), t('perProduct'));
+  const productsWs = XLSX.utils.aoa_to_sheet(productRows);
+  setColumnEuroFormat(productsWs, 2, productRows.length);
+  XLSX.utils.book_append_sheet(wb, productsWs, t('perProduct'));
 
-  const cats = [[t('date'), t('category'), t('quantity'), t('revenue') + ' (€)']];
+  // --- Per reparto ---
+  const catRows = [[t('date'), t('category'), t('quantity'), t('revenue') + ' (€)']];
   days.forEach(d => {
     const dayCats = Object.entries(byDay[d].categories).sort(([, a], [, b]) => a.catOrder - b.catOrder);
     dayCats.forEach(([name, c]) => {
-      cats.push([d, name, c.quantity, c.revenue.toFixed(2)]);
+      catRows.push([d, name, c.quantity, c.revenue]);
     });
   });
-  XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(cats), t('perCategory'));
+  const catsWs = XLSX.utils.aoa_to_sheet(catRows);
+  setColumnEuroFormat(catsWs, 3, catRows.length);
+  XLSX.utils.book_append_sheet(wb, catsWs, t('perCategory'));
 
-  const details = [[t('date'), t('time'), t('orderNumber'), t('tableNumber2'), t('note'), t('total') + ' (€)']];
+  // --- Dettaglio ordini ---
+  const detailRows = [[t('date'), t('time'), t('orderNumber'), t('tableNumber2'), t('note'), t('total') + ' (€)']];
   days.forEach(d => {
     byDay[d].orders.forEach(o => {
-      details.push([
+      detailRows.push([
         d,
         formatTime(o.created_date),
         o.order_number || '',
         o.table_number || '',
         o.note || '',
-        (o.total || 0).toFixed(2),
+        o.total || 0,
       ]);
     });
   });
-  XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(details), t('orderDetails'));
+  const detailsWs = XLSX.utils.aoa_to_sheet(detailRows);
+  setColumnEuroFormat(detailsWs, 5, detailRows.length);
+  XLSX.utils.book_append_sheet(wb, detailsWs, t('orderDetails'));
+
 
   return wb;
 }
