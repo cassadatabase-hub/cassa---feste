@@ -20,12 +20,13 @@ export function computeReport(orders, categories) {
       const name = item.name_it || item.name || 'N/D';
       const cat = categories.find(c => c.id === item.category_id);
       const catName = cat ? cat.name_it : 'Senza reparto';
+      const catOrder = cat ? (cat.sort_order ?? 999) : 999;
       const qty = item.quantity || 1;
       const rev = (item.price || 0) * qty;
-      if (!byDay[dayKey].products[name]) byDay[dayKey].products[name] = { quantity: 0, revenue: 0 };
+      if (!byDay[dayKey].products[name]) byDay[dayKey].products[name] = { quantity: 0, revenue: 0, category: catName, catOrder };
       byDay[dayKey].products[name].quantity += qty;
       byDay[dayKey].products[name].revenue += rev;
-      if (!byDay[dayKey].categories[catName]) byDay[dayKey].categories[catName] = { quantity: 0, revenue: 0 };
+      if (!byDay[dayKey].categories[catName]) byDay[dayKey].categories[catName] = { quantity: 0, revenue: 0, catOrder };
       byDay[dayKey].categories[catName].quantity += qty;
       byDay[dayKey].categories[catName].revenue += rev;
     });
@@ -48,17 +49,20 @@ export function buildWorkbook(report, t) {
   ];
   XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(summary), t('dailyReport'));
 
-  const products = [[t('date'), t('product'), t('quantity'), t('revenue') + ' (€)']];
+  const products = [[t('date'), t('category'), t('product'), t('quantity'), t('revenue') + ' (€)']];
   days.forEach(d => {
-    Object.entries(byDay[d].products).forEach(([name, p]) => {
-      products.push([d, name, p.quantity, p.revenue.toFixed(2)]);
+    const dayProducts = Object.entries(byDay[d].products)
+      .sort(([, a], [, b]) => (a.catOrder - b.catOrder) || b.quantity - a.quantity);
+    dayProducts.forEach(([name, p]) => {
+      products.push([d, p.category, name, p.quantity, p.revenue.toFixed(2)]);
     });
   });
   XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(products), t('perProduct'));
 
   const cats = [[t('date'), t('category'), t('quantity'), t('revenue') + ' (€)']];
   days.forEach(d => {
-    Object.entries(byDay[d].categories).forEach(([name, c]) => {
+    const dayCats = Object.entries(byDay[d].categories).sort(([, a], [, b]) => a.catOrder - b.catOrder);
+    dayCats.forEach(([name, c]) => {
       cats.push([d, name, c.quantity, c.revenue.toFixed(2)]);
     });
   });
