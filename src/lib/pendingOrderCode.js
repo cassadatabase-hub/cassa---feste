@@ -1,8 +1,9 @@
 // Salva l'ultimo codice ordine generato nel browser (localStorage), così se
 // il cliente chiude per sbaglio la schermata di conferma o ricarica la
 // pagina, il codice non è perso per sempre: resta recuperabile da questo
-// stesso dispositivo/browser finché non scade (stesso limite di validità
-// del codice stesso) o finché non lo chiude volontariamente.
+// stesso dispositivo/browser finché la cassa non conferma il pagamento
+// (a quel punto Home.jsx lo toglie da solo, vedi il controllo su Supabase),
+// oppure finché il cliente non lo chiude volontariamente.
 // Nessun account, nessun login: è lo stesso meccanismo già usato per
 // salvare il carrello (sagra_cart).
 const KEY = 'sagra_last_order_code';
@@ -19,17 +20,11 @@ export function savePendingOrderCode({ code, table_number, total, customer_name 
   }
 }
 
-export function getPendingOrderCode(expiryHours = 4) {
+export function getPendingOrderCode() {
   try {
     const raw = localStorage.getItem(KEY);
     if (!raw) return null;
-    const data = JSON.parse(raw);
-    const ageMs = Date.now() - (data.saved_at || 0);
-    if (ageMs > expiryHours * 3600 * 1000) {
-      localStorage.removeItem(KEY);
-      return null;
-    }
-    return data;
+    return JSON.parse(raw);
   } catch (e) {
     return null;
   }

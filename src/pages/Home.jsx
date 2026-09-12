@@ -15,6 +15,7 @@ import { ShoppingCart, Search, Utensils } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { formatPrice } from '@/lib/codeGen';
 import { getPendingOrderCode, clearPendingOrderCode } from '@/lib/pendingOrderCode';
+import { base44 } from '@/api/base44Client';
 import { cn } from '@/lib/utils';
 import { Image } from '@/components/ui/image';
 
@@ -41,9 +42,24 @@ function HomeContent() {
   }, [loading, categories, activeCat]);
 
   useEffect(() => {
-    const saved = getPendingOrderCode(settings?.code_expiry_hours || 4);
-    if (saved) setPendingCode(saved);
-  }, [settings?.code_expiry_hours]);
+    const saved = getPendingOrderCode();
+    if (!saved) return;
+    // Mostriamo subito quello che abbiamo salvato localmente, poi controlliamo
+    // lo stato vero su Supabase: se la cassa lo ha già confermato ("consumed"),
+    // il codice ha fatto il suo dovere e lo togliamo. Se è ancora "pending",
+    // resta visibile — anche se sono passate ore, finché non viene confermato.
+    setPendingCode(saved);
+    base44.entities.OrderCode.filter({ code: saved.code, purpose: 'cassa' })
+      .then(results => {
+        const oc = results && results[0];
+        if (!oc) return; // non trovato: lasciamo comunque visibile quanto salvato
+        if (oc.status === 'consumed') {
+          clearPendingOrderCode();
+          setPendingCode(null);
+        }
+      })
+      .catch(() => { /* offline o errore di rete: lasciamo visibile la copia locale */ });
+  }, []);
 
   useEffect(() => {
     const seen = localStorage.getItem('sagra_onboarded');
