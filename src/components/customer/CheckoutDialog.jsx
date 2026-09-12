@@ -7,6 +7,7 @@ import { Copy, Check, Share2, UserPlus } from 'lucide-react';
 import { useCart } from '@/lib/cart';
 import { useLang } from '@/lib/i18n';
 import { generateCode, formatPrice } from '@/lib/codeGen';
+import { savePendingOrderCode } from '@/lib/pendingOrderCode';
 import { base44 } from '@/api/base44Client';
 import { useToast } from '@/components/ui/use-toast';
 
@@ -44,6 +45,7 @@ export default function CheckoutDialog({ open, onClose, onClear, settings }) {
         purpose: 'cassa',
       });
       setGeneratedCode(code);
+      savePendingOrderCode({ code, table_number: tableNumber, total: allTotal, customer_name: customerName });
     } catch (e) {
       toast({ title: 'Errore', description: e.message, variant: 'destructive' });
     } finally {

@@ -14,6 +14,7 @@ import { Input } from '@/components/ui/input';
 import { ShoppingCart, Search, Utensils } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { formatPrice } from '@/lib/codeGen';
+import { getPendingOrderCode, clearPendingOrderCode } from '@/lib/pendingOrderCode';
 import { cn } from '@/lib/utils';
 import { Image } from '@/components/ui/image';
 
@@ -30,12 +31,19 @@ function HomeContent() {
   const [wizardMenu, setWizardMenu] = useState(null);
   const [optionsProduct, setOptionsProduct] = useState(null);
   const [tempSelections, setTempSelections] = useState(/** @type {Record<string, boolean>} */ ({}));
+  const [pendingCode, setPendingCode] = useState(null);
+  const [pendingCodeDetailOpen, setPendingCodeDetailOpen] = useState(false);
 
   useEffect(() => {
     if (!loading && categories.length > 0 && !activeCat) {
       setActiveCat(categories[0].id);
     }
   }, [loading, categories, activeCat]);
+
+  useEffect(() => {
+    const saved = getPendingOrderCode(settings?.code_expiry_hours || 4);
+    if (saved) setPendingCode(saved);
+  }, [settings?.code_expiry_hours]);
 
   useEffect(() => {
     const seen = localStorage.getItem('sagra_onboarded');
@@ -72,6 +80,7 @@ function HomeContent() {
       category_id: product.category_id,
       type,
       quantity: 1,
+      separate_print: product.separate_print || false,
     });
   };
 
@@ -95,6 +104,7 @@ function HomeContent() {
       quantity: 1,
       lactose_free,
       selected_options,
+      separate_print: product.separate_print || false,
     });
     setOptionsProduct(null);
     setTempSelections({});
@@ -282,6 +292,32 @@ function HomeContent() {
         </section>
       </main>
 
+      {/* Recovered order code banner: reappears even after a refresh or an
+          accidental close, so the customer never really "loses" their code. */}
+      {pendingCode && (
+        <div className={cn(
+          "fixed left-0 right-0 z-40 px-4 max-w-3xl mx-auto",
+          items.length > 0 ? "bottom-20" : "bottom-4"
+        )}>
+          <div className="w-full bg-white border-2 border-orange-500 rounded-2xl shadow-lg px-4 py-2.5 flex items-center justify-between gap-2">
+            <button className="flex items-center gap-2 min-w-0 flex-1 text-left" onClick={() => setPendingCodeDetailOpen(true)}>
+              <span className="text-xl">🎫</span>
+              <span className="min-w-0">
+                <span className="block text-[11px] text-muted-foreground leading-tight">{t('yourLastCode')}</span>
+                <span className="block font-bold tracking-widest text-orange-600 leading-tight">{pendingCode.code}</span>
+              </span>
+            </button>
+            <button
+              className="text-muted-foreground hover:text-foreground text-sm px-1 flex-shrink-0"
+              onClick={() => { clearPendingOrderCode(); setPendingCode(null); }}
+              aria-label={t('close')}
+            >
+              ✕
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* Floating cart button */}
       {items.length > 0 && (
         <div className="fixed bottom-4 left-0 right-0 z-40 px-4 max-w-3xl mx-auto">
@@ -321,6 +357,33 @@ function HomeContent() {
             <div className="flex gap-2">
               <Button className="flex-1" onClick={() => setPendingOpen(false)}>{t('continueOrder')}</Button>
               <Button variant="outline" className="flex-1" onClick={() => { localStorage.removeItem('sagra_cart'); localStorage.removeItem('sagra_pending_order'); window.location.reload(); }}>{t('cancelOrder')}</Button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Pending order code detail (reopened from the banner) */}
+      {pendingCodeDetailOpen && pendingCode && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4" onClick={() => setPendingCodeDetailOpen(false)}>
+          <div className="text-center space-y-6 bg-white rounded-2xl p-6 max-w-sm w-full" onClick={e => e.stopPropagation()}>
+            <div>
+              <p className="text-sm text-muted-foreground mb-2">{t('yourLastCode')}</p>
+              <div className="bg-gradient-to-br from-orange-500 to-orange-600 text-white rounded-2xl p-8">
+                <p className="text-xs uppercase tracking-widest opacity-80 mb-2">{t('yourCode')}</p>
+                <p className="text-5xl font-bold tracking-[0.3em] font-mono">{pendingCode.code}</p>
+                {pendingCode.table_number && (
+                  <p className="text-sm mt-3 opacity-90">{t('tableNumber')}: <span className="font-bold">{pendingCode.table_number}</span></p>
+                )}
+                {typeof pendingCode.total === 'number' && (
+                  <p className="text-sm opacity-90">{formatPrice(pendingCode.total)}</p>
+                )}
+              </div>
+            </div>
+            <div className="flex gap-2">
+              <Button variant="outline" className="flex-1" onClick={() => { clearPendingOrderCode(); setPendingCode(null); setPendingCodeDetailOpen(false); }}>
+                {t('dismissCode')}
+              </Button>
+              <Button className="flex-1" onClick={() => setPendingCodeDetailOpen(false)}>{t('close')}</Button>
             </div>
           </div>
         </div>

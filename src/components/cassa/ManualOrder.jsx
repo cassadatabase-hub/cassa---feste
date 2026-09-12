@@ -70,6 +70,7 @@ export default function ManualOrder({ categories, products, comandaTemplates, pr
         category_id: product.category_id,
         lactose_free,
         selected_options,
+        separate_print: product.separate_print || false,
         uid: Date.now() + Math.random(),
         quantity: 1,
       }];

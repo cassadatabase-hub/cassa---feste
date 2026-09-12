@@ -20,7 +20,7 @@ export default function ProductsManager({ products, categories, allergens, produ
   const emptyForm = {
     name_it: '', name_en: '', description_it: '', description_en: '', price: 0, category_id: '',
     allergens: [], available: true, lactose_free_option: false, sort_order: 0, image_url: '',
-    option_ids: [], is_new: false, stock_enabled: false, stock_quantity: '',
+    option_ids: [], is_new: false, stock_enabled: false, stock_quantity: '', separate_print: false,
   };
   const [form, setForm] = useState(emptyForm);
 
@@ -63,7 +63,7 @@ export default function ProductsManager({ products, categories, allergens, produ
       price: p.price, category_id: p.category_id,
       allergens: p.allergens || [], available: p.available !== false, lactose_free_option: p.lactose_free_option || false, sort_order: p.sort_order || 0,
       image_url: p.image_url || '',
-      option_ids: p.option_ids || [], is_new: p.is_new || false,
+      option_ids: p.option_ids || [], is_new: p.is_new || false, separate_print: p.separate_print || false,
       stock_enabled: p.stock_enabled || false, stock_quantity: p.stock_quantity ?? '',
     });
   };
@@ -180,6 +180,13 @@ export default function ProductsManager({ products, categories, allergens, produ
             <Switch checked={form.is_new} onCheckedChange={v => setForm({ ...form, is_new: v })} />
             <Label className="text-sm">✨ {t('isNewLabel')}</Label>
           </div>
+          <div className="flex items-center gap-2">
+            <Switch checked={form.separate_print} onCheckedChange={v => setForm({ ...form, separate_print: v })} />
+            <Label className="text-sm">🖨️ {t('separatePrintLabel')}</Label>
+          </div>
+          {form.separate_print && (
+            <p className="text-xs text-muted-foreground -mt-2">{t('separatePrintHint')}</p>
+          )}
           <div className="border rounded-lg p-3 space-y-2 bg-slate-50">
             <div className="flex items-center gap-2">
               <Switch checked={form.stock_enabled} onCheckedChange={v => setForm({ ...form, stock_enabled: v })} />
@@ -222,6 +229,7 @@ export default function ProductsManager({ products, categories, allergens, produ
                     <p className={`font-medium text-sm truncate flex items-center gap-1.5 ${p.available === false ? 'line-through text-muted-foreground' : ''}`}>
                       {p.name_it}
                       {p.is_new && <span className="text-[10px] font-bold bg-violet-600 text-white rounded px-1.5 py-0.5 flex-shrink-0">✨ {t('isNewLabel')}</span>}
+                      {p.separate_print && <span className="text-[10px] font-bold bg-slate-600 text-white rounded px-1.5 py-0.5 flex-shrink-0">🖨️ {t('separatePrintShort')}</span>}
                     </p>
                     <p className="text-xs text-muted-foreground">
                       {cat?.name_it} · {formatPrice(p.price)}

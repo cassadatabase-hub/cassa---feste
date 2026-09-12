@@ -8,9 +8,16 @@ const FONT_FAMILY_MAP = {
 };
 
 export default function ComandaPrint({ order, categories, templates, singleMode, productOptions = [] }) {
+  // Prodotti con "separa dal gruppo in stampa" attivo: escludiamoli dal
+  // normale raggruppamento per reparto, li stamperemo ognuno su una
+  // comanda a sé (vedi più sotto).
+  const allItems = order.items || [];
+  const normalItems = allItems.filter(item => !item.separate_print);
+  const separatedItems = allItems.filter(item => item.separate_print);
+
   // Group items by category
   const itemsByCategory = {};
-  (order.items || []).forEach(item => {
+  normalItems.forEach(item => {
     const catId = item.category_id || item.product_category_id;
     if (!itemsByCategory[catId]) itemsByCategory[catId] = [];
     itemsByCategory[catId].push(item);
@@ -63,6 +70,30 @@ export default function ComandaPrint({ order, categories, templates, singleMode,
     })).filter(c => c.categoryIds.some(cid => itemsByCategory[cid]));
   }
 
+  // Stile/intestazione "di base" da riusare per le comande dei prodotti
+  // separati: la stessa della prima comanda normale, così l'intestazione
+  // (header, tavolo, ora, ecc.) resta identica a tutte le altre.
+  const DEFAULT_STYLE = {
+    paperSize: '80mm', font_family: 'monospace', font_size: 12, title_font_size: 16,
+    header_text: '', header_font_size: 20, header_bold: true, header_align: 'center',
+  };
+  const baseStyle = comandas[0] || DEFAULT_STYLE;
+
+  separatedItems.forEach(item => {
+    comandas.push({
+      title: (item.name_it || item.name || '').toUpperCase(),
+      paperSize: baseStyle.paperSize,
+      font_family: baseStyle.font_family,
+      font_size: baseStyle.font_size,
+      title_font_size: baseStyle.title_font_size,
+      header_text: baseStyle.header_text,
+      header_font_size: baseStyle.header_font_size,
+      header_bold: baseStyle.header_bold,
+      header_align: baseStyle.header_align,
+      directItems: [{ name: itemDisplayName(item), quantity: item.quantity || 1 }],
+    });
+  });
+
   const getWidth = (size) => {
     if (size === '58mm') return '58mm';
     if (size === 'A4') return '210mm';
@@ -72,7 +103,7 @@ export default function ComandaPrint({ order, categories, templates, singleMode,
   return (
     <div>
       {comandas.map((comanda, idx) => {
-        const comandaItems = comanda.categoryIds.flatMap(cid => {
+        const comandaItems = comanda.directItems || comanda.categoryIds.flatMap(cid => {
           const cat = categories.find(c => c.id === cid);
           const items = itemsByCategory[cid] || [];
           return items.map(item => ({

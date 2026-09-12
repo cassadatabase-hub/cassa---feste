@@ -93,7 +93,7 @@ export function buildWorkbook(report, t) {
   });
   const productRows = [[t('product'), t('quantity'), t('revenue') + ' (€)']];
   const sortedProducts = Object.entries(allProducts)
-    .sort(([, a], [, b]) => (a.catOrder - b.catOrder) || b.quantity - a.quantity);
+    .sort(([, a], [, b]) => (a.catOrder - b.catOrder) || a.category.localeCompare(b.category, 'it') || b.quantity - a.quantity);
   let currentCategory = null;
   sortedProducts.forEach(([name, p]) => {
     if (p.category !== currentCategory) {
@@ -109,7 +109,7 @@ export function buildWorkbook(report, t) {
   // --- Per reparto ---
   const catRows = [[t('date'), t('category'), t('quantity'), t('revenue') + ' (€)']];
   days.forEach(d => {
-    const dayCats = Object.entries(byDay[d].categories).sort(([, a], [, b]) => a.catOrder - b.catOrder);
+    const dayCats = Object.entries(byDay[d].categories).sort(([nameA, a], [nameB, b]) => (a.catOrder - b.catOrder) || nameA.localeCompare(nameB, 'it'));
     dayCats.forEach(([name, c]) => {
       catRows.push([d, name, c.quantity, c.revenue]);
     });
