@@ -11,7 +11,7 @@ import { savePendingOrderCode } from '@/lib/pendingOrderCode';
 import { base44 } from '@/api/base44Client';
 import { useToast } from '@/components/ui/use-toast';
 
-export default function CheckoutDialog({ open, onClose, onClear, settings }) {
+export default function CheckoutDialog({ open, onClose, onClear, onCodeGenerated, settings }) {
   const { items, total, tableNumber, customerName, setCustomerName, clearCart } = useCart();
   const { t, tn } = useLang();
   const { toast } = useToast();
@@ -45,7 +45,9 @@ export default function CheckoutDialog({ open, onClose, onClear, settings }) {
         purpose: 'cassa',
       });
       setGeneratedCode(code);
-      savePendingOrderCode({ code, table_number: tableNumber, total: allTotal, customer_name: customerName });
+      const pending = { code, table_number: tableNumber, total: allTotal, customer_name: customerName };
+      savePendingOrderCode(pending);
+      onCodeGenerated?.(pending);
     } catch (e) {
       toast({ title: 'Errore', description: e.message, variant: 'destructive' });
     } finally {

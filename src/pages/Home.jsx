@@ -43,23 +43,29 @@ function HomeContent() {
 
   useEffect(() => {
     const saved = getPendingOrderCode();
-    if (!saved) return;
-    // Mostriamo subito quello che abbiamo salvato localmente, poi controlliamo
-    // lo stato vero su Supabase: se la cassa lo ha già confermato ("consumed"),
-    // il codice ha fatto il suo dovere e lo togliamo. Se è ancora "pending",
-    // resta visibile — anche se sono passate ore, finché non viene confermato.
-    setPendingCode(saved);
-    base44.entities.OrderCode.filter({ code: saved.code, purpose: 'cassa' })
-      .then(results => {
-        const oc = results && results[0];
-        if (!oc) return; // non trovato: lasciamo comunque visibile quanto salvato
-        if (oc.status === 'consumed') {
-          clearPendingOrderCode();
-          setPendingCode(null);
-        }
-      })
-      .catch(() => { /* offline o errore di rete: lasciamo visibile la copia locale */ });
+    if (saved) setPendingCode(saved);
   }, []);
+
+  // Finché c'è un codice in sospeso, controlliamo periodicamente su Supabase
+  // se la cassa lo ha confermato — così il banner sparisce da solo, senza che
+  // il cliente debba ricaricare la pagina.
+  useEffect(() => {
+    if (!pendingCode) return;
+    const checkStatus = () => {
+      base44.entities.OrderCode.filter({ code: pendingCode.code, purpose: 'cassa' })
+        .then(results => {
+          const oc = results && results[0];
+          if (oc && oc.status === 'consumed') {
+            clearPendingOrderCode();
+            setPendingCode(null);
+          }
+        })
+        .catch(() => { /* offline o errore di rete: riproviamo al prossimo giro */ });
+    };
+    checkStatus();
+    const interval = setInterval(checkStatus, 15000);
+    return () => clearInterval(interval);
+  }, [pendingCode?.code]);
 
   useEffect(() => {
     const seen = localStorage.getItem('sagra_onboarded');
@@ -359,7 +365,13 @@ function HomeContent() {
       <CartDrawer open={cartOpen} onOpenChange={setCartOpen} onCheckout={() => { setCartOpen(false); setCheckoutOpen(true); }} productOptions={productOptions} />
 
       {/* Checkout dialog */}
-      <CheckoutDialog open={checkoutOpen} onClose={() => setCheckoutOpen(false)} onClear={() => { setCartOpen(false); }} settings={settings} />
+      <CheckoutDialog
+        open={checkoutOpen}
+        onClose={() => setCheckoutOpen(false)}
+        onClear={() => { setCartOpen(false); }}
+        onCodeGenerated={(data) => setPendingCode(data)}
+        settings={settings}
+      />
 
       {/* Onboarding */}
       <Onboarding open={onboardingOpen} onClose={() => setOnboardingOpen(false)} />
