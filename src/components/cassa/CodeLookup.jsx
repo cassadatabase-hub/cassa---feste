@@ -216,12 +216,12 @@ export default function CodeLookup({ categories, comandaTemplates, productOption
           </CardHeader>
           <CardContent className="space-y-3">
             <p className="text-sm">{t('orderNumber')} <strong>{paidOrder.order_number}</strong> — {t('tableNumber2')} {paidOrder.table_number}</p>
-            <ReceiptPrint order={paidOrder} festaName={festaName} productOptions={productOptions} />
-            <ComandaPrint order={paidOrder} categories={categories} templates={comandaTemplates} singleMode={false} productOptions={productOptions} />
-            <Button variant="outline" className="w-full" onClick={() => window.print()}>
-              <Printer className="w-4 h-4 mr-2" />
+            <Button size="lg" className="w-full bg-slate-800 hover:bg-slate-900" onClick={() => window.print()}>
+              <Printer className="w-5 h-5 mr-2" />
               {t('print')}
             </Button>
+            <ReceiptPrint order={paidOrder} festaName={festaName} productOptions={productOptions} />
+            <ComandaPrint order={paidOrder} categories={categories} templates={comandaTemplates} singleMode={false} productOptions={productOptions} />
             <Button variant="ghost" className="w-full" onClick={() => { setShowPrint(false); setPaidOrder(null); }}>{t('close')}</Button>
           </CardContent>
         </Card>

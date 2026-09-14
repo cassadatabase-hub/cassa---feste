@@ -261,7 +261,7 @@ export default function ManualOrder({ categories, products, comandaTemplates, pr
           <div className="max-h-[70vh] overflow-y-auto space-y-4 pr-1">
             {productsByCategory.map(({ cat, items }) => (
               <div key={cat.id}>
-                <h3 className="text-xs font-bold text-muted-foreground uppercase tracking-wide mb-1.5 px-0.5">
+                <h3 className="text-sm font-extrabold text-white bg-slate-700 uppercase tracking-wide px-3 py-2 rounded-lg mb-2 sticky top-0 z-10 shadow">
                   {cat.icon} {tn(cat.name_it, cat.name_en)}
                 </h3>
                 <div className="space-y-1.5">
@@ -365,12 +365,12 @@ export default function ManualOrder({ categories, products, comandaTemplates, pr
           </CardHeader>
           <CardContent className="space-y-3">
             <p className="text-sm">{t('orderNumber')} <strong>{completedOrder.order_number}</strong> — {t('tableNumber2')} {completedOrder.table_number}</p>
-            <ReceiptPrint order={completedOrder} festaName={festaName} productOptions={productOptions} />
-            <ComandaPrint order={completedOrder} categories={categories} templates={comandaTemplates} singleMode={false} productOptions={productOptions} />
-            <Button variant="outline" className="w-full" onClick={() => window.print()}>
-              <Printer className="w-4 h-4 mr-2" />
+            <Button size="lg" className="w-full bg-slate-800 hover:bg-slate-900" onClick={() => window.print()}>
+              <Printer className="w-5 h-5 mr-2" />
               {t('print')}
             </Button>
+            <ReceiptPrint order={completedOrder} festaName={festaName} productOptions={productOptions} />
+            <ComandaPrint order={completedOrder} categories={categories} templates={comandaTemplates} singleMode={false} productOptions={productOptions} />
             <Button variant="ghost" className="w-full" onClick={() => setCompletedOrder(null)}>{t('close')}</Button>
           </CardContent>
         </Card>
