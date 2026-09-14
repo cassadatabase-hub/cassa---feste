@@ -25,6 +25,19 @@ export default function ManualOrder({ categories, products, comandaTemplates, pr
   const [festaName, setFestaName] = useState('');
   const [optionsProduct, setOptionsProduct] = useState(null);
   const [tempSelections, setTempSelections] = useState(/** @type {Record<string, boolean>} */ ({}));
+  // Vista prodotti: "tabs" (attuale, per reparto) o "list" (scorrimento unico,
+  // raggruppato per reparto). Scelta salvata solo su QUESTO dispositivo/browser,
+  // non è un'impostazione globale — ogni cassa può tenere la sua preferita.
+  const [viewMode, setViewMode] = useState(() => {
+    try { return localStorage.getItem('cassa_products_view') || 'tabs'; } catch (e) { return 'tabs'; }
+  });
+  const toggleViewMode = () => {
+    setViewMode(prev => {
+      const next = prev === 'tabs' ? 'list' : 'tabs';
+      try { localStorage.setItem('cassa_products_view', next); } catch (e) { /* ignora */ }
+      return next;
+    });
+  };
 
   React.useEffect(() => {
     base44.entities.AppSettings.list('-created_date', 1).then(s => {
@@ -180,49 +193,107 @@ export default function ManualOrder({ categories, products, comandaTemplates, pr
     !(p.stock_enabled && (p.stock_quantity ?? 0) <= 0)
   );
 
+  // Vista a scorrimento: tutti i prodotti disponibili, raggruppati per
+  // reparto nell'ordine dei reparti stessi — niente tab da cliccare.
+  const availableProducts = products.filter(p =>
+    p.available !== false &&
+    !(p.stock_enabled && (p.stock_quantity ?? 0) <= 0)
+  );
+  const productsByCategory = categories
+    .map(cat => ({ cat, items: availableProducts.filter(p => p.category_id === cat.id) }))
+    .filter(g => g.items.length > 0);
+
   return (
     <>
     <div className="grid lg:grid-cols-[1fr_380px] gap-4">
       {/* Product grid */}
       <div className="space-y-3">
-        <div className="flex gap-1.5 overflow-x-auto pb-1">
-          {categories.map(cat => (
-            <button
-              key={cat.id}
-              onClick={() => setActiveCat(cat.id)}
-              className={cn(
-                "flex-shrink-0 px-3 py-1.5 rounded-lg text-sm font-medium transition",
-                activeCat === cat.id ? "bg-slate-800 text-white" : "bg-white border hover:border-slate-400"
-              )}
-            >
-              {cat.icon} {tn(cat.name_it, cat.name_en)}
-            </button>
-          ))}
-        </div>
-        <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
-          {filteredProducts.map(product => {
-            const cartItems = cart.filter(i => i.product_id === product.id);
-            const totalQty = cartItems.reduce((s, i) => s + i.quantity, 0);
-            return (
+        <div className="flex items-center gap-1.5">
+          <div className="flex gap-1.5 overflow-x-auto pb-1 flex-1">
+            {viewMode === 'tabs' && categories.map(cat => (
               <button
-                key={product.id}
-                onClick={() => handleOptionClick(product)}
+                key={cat.id}
+                onClick={() => setActiveCat(cat.id)}
                 className={cn(
-                  "text-left p-3 rounded-lg border-2 transition relative",
-                  totalQty > 0 ? "border-orange-500 bg-orange-50" : "border-border bg-white hover:border-slate-400"
+                  "flex-shrink-0 px-3 py-1.5 rounded-lg text-sm font-medium transition",
+                  activeCat === cat.id ? "bg-slate-800 text-white" : "bg-white border hover:border-slate-400"
                 )}
               >
-                <p className="text-sm font-medium leading-tight">{tn(product.name_it, product.name_en)}</p>
-                <p className="text-sm font-bold text-orange-600 mt-1">{formatPrice(product.price)}</p>
-                {totalQty > 0 && (
-                  <span className="absolute top-1.5 right-1.5 bg-orange-600 text-white text-xs font-bold rounded-full w-5 h-5 flex items-center justify-center">
-                    {totalQty}
-                  </span>
-                )}
+                {cat.icon} {tn(cat.name_it, cat.name_en)}
               </button>
-            );
-          })}
+            ))}
+          </div>
+          <button
+            onClick={toggleViewMode}
+            className="flex-shrink-0 px-3 py-1.5 rounded-lg text-sm font-medium border bg-white hover:border-slate-400 transition"
+            title={t('toggleViewMode')}
+          >
+            {viewMode === 'tabs' ? `📜 ${t('scrollView')}` : `🗂️ ${t('tabsView')}`}
+          </button>
         </div>
+
+        {viewMode === 'tabs' ? (
+          <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+            {filteredProducts.map(product => {
+              const cartItems = cart.filter(i => i.product_id === product.id);
+              const totalQty = cartItems.reduce((s, i) => s + i.quantity, 0);
+              return (
+                <button
+                  key={product.id}
+                  onClick={() => handleOptionClick(product)}
+                  className={cn(
+                    "text-left p-3 rounded-lg border-2 transition relative",
+                    totalQty > 0 ? "border-orange-500 bg-orange-50" : "border-border bg-white hover:border-slate-400"
+                  )}
+                >
+                  <p className="text-sm font-medium leading-tight">{tn(product.name_it, product.name_en)}</p>
+                  <p className="text-sm font-bold text-orange-600 mt-1">{formatPrice(product.price)}</p>
+                  {totalQty > 0 && (
+                    <span className="absolute top-1.5 right-1.5 bg-orange-600 text-white text-xs font-bold rounded-full w-5 h-5 flex items-center justify-center">
+                      {totalQty}
+                    </span>
+                  )}
+                </button>
+              );
+            })}
+          </div>
+        ) : (
+          <div className="max-h-[70vh] overflow-y-auto space-y-4 pr-1">
+            {productsByCategory.map(({ cat, items }) => (
+              <div key={cat.id}>
+                <h3 className="text-xs font-bold text-muted-foreground uppercase tracking-wide mb-1.5 px-0.5">
+                  {cat.icon} {tn(cat.name_it, cat.name_en)}
+                </h3>
+                <div className="space-y-1.5">
+                  {items.map(product => {
+                    const cartItems = cart.filter(i => i.product_id === product.id);
+                    const totalQty = cartItems.reduce((s, i) => s + i.quantity, 0);
+                    return (
+                      <button
+                        key={product.id}
+                        onClick={() => handleOptionClick(product)}
+                        className={cn(
+                          "w-full text-left px-3 py-2.5 rounded-lg border-2 transition flex items-center justify-between gap-3",
+                          totalQty > 0 ? "border-orange-500 bg-orange-50" : "border-border bg-white hover:border-slate-400"
+                        )}
+                      >
+                        <span className="text-sm font-medium truncate">{tn(product.name_it, product.name_en)}</span>
+                        <span className="flex items-center gap-2 flex-shrink-0">
+                          <span className="text-sm font-bold text-orange-600">{formatPrice(product.price)}</span>
+                          {totalQty > 0 && (
+                            <span className="bg-orange-600 text-white text-xs font-bold rounded-full w-5 h-5 flex items-center justify-center">
+                              {totalQty}
+                            </span>
+                          )}
+                        </span>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
       </div>
 
       {/* Cart sidebar */}
