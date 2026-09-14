@@ -19,6 +19,19 @@ function CassaContent() {
   const [pin, setPin] = useState('');
   const [error, setError] = useState(false);
   const [refreshKey, setRefreshKey] = useState(0);
+  const [activeTab, setActiveTab] = useState('lookup');
+  // Vista prodotti della Cassa manuale: "tabs" (per reparto) o "list"
+  // (scorrimento unico). Salvata solo su QUESTO dispositivo/browser.
+  const [viewMode, setViewMode] = useState(() => {
+    try { return localStorage.getItem('cassa_products_view') || 'tabs'; } catch (e) { return 'tabs'; }
+  });
+  const toggleViewMode = () => {
+    setViewMode(prev => {
+      const next = prev === 'tabs' ? 'list' : 'tabs';
+      try { localStorage.setItem('cassa_products_view', next); } catch (e) { /* ignora */ }
+      return next;
+    });
+  };
 
   useEffect(() => {
     if (sessionStorage.getItem('cassa_authed') === '1') setAuthed(true);
@@ -85,6 +98,15 @@ function CassaContent() {
             <span className="text-xs text-muted-foreground hidden sm:inline">{new Date().toLocaleDateString('it-IT', { weekday: 'long', day: 'numeric', month: 'long' })}</span>
           </div>
           <div className="flex items-center gap-3">
+            {activeTab === 'manual' && (
+              <button
+                onClick={toggleViewMode}
+                className="px-3 py-1.5 rounded-lg text-sm font-medium border bg-white hover:border-slate-400 transition"
+                title={t('toggleViewMode')}
+              >
+                {viewMode === 'tabs' ? `📜 ${t('scrollView')}` : `🗂️ ${t('tabsView')}`}
+              </button>
+            )}
             <LanguageToggle />
             <Button variant="outline" size="sm" onClick={handleLogout}>
               <LogOut className="w-4 h-4 mr-1" />
@@ -95,7 +117,7 @@ function CassaContent() {
       </header>
 
       <main className="max-w-6xl mx-auto px-4 py-4">
-        <Tabs defaultValue="lookup" className="w-full">
+        <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
           <TabsList className="grid grid-cols-3 mb-4">
             <TabsTrigger value="lookup"><Search className="w-4 h-4 mr-1.5" />{t('lookupCode')}</TabsTrigger>
             <TabsTrigger value="manual"><ClipboardList className="w-4 h-4 mr-1.5" />{t('manualOrder')}</TabsTrigger>
@@ -105,7 +127,7 @@ function CassaContent() {
             <CodeLookup categories={categories} comandaTemplates={comandaTemplates} productOptions={productOptions} onOrderCompleted={() => setRefreshKey(k => k + 1)} />
           </TabsContent>
           <TabsContent value="manual">
-            <ManualOrder categories={categories} products={products} comandaTemplates={comandaTemplates} productOptions={productOptions} />
+            <ManualOrder categories={categories} products={products} comandaTemplates={comandaTemplates} productOptions={productOptions} viewMode={viewMode} />
           </TabsContent>
           <TabsContent value="history">
             <OrderHistory categories={categories} comandaTemplates={comandaTemplates} productOptions={productOptions} refreshKey={refreshKey} activeFestaId={settings?.active_festa_id} />

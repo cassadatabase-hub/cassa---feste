@@ -13,7 +13,7 @@ import ComandaPrint from '@/components/cassa/ComandaPrint';
 import ReceiptPrint from '@/components/cassa/ReceiptPrint';
 import { cn } from '@/lib/utils';
 
-export default function ManualOrder({ categories, products, comandaTemplates, productOptions = [] }) {
+export default function ManualOrder({ categories, products, comandaTemplates, productOptions = [], viewMode = 'tabs' }) {
   const { t, tn } = useLang();
   const { toast } = useToast();
   const [activeCat, setActiveCat] = useState(null);
@@ -25,19 +25,6 @@ export default function ManualOrder({ categories, products, comandaTemplates, pr
   const [festaName, setFestaName] = useState('');
   const [optionsProduct, setOptionsProduct] = useState(null);
   const [tempSelections, setTempSelections] = useState(/** @type {Record<string, boolean>} */ ({}));
-  // Vista prodotti: "tabs" (attuale, per reparto) o "list" (scorrimento unico,
-  // raggruppato per reparto). Scelta salvata solo su QUESTO dispositivo/browser,
-  // non è un'impostazione globale — ogni cassa può tenere la sua preferita.
-  const [viewMode, setViewMode] = useState(() => {
-    try { return localStorage.getItem('cassa_products_view') || 'tabs'; } catch (e) { return 'tabs'; }
-  });
-  const toggleViewMode = () => {
-    setViewMode(prev => {
-      const next = prev === 'tabs' ? 'list' : 'tabs';
-      try { localStorage.setItem('cassa_products_view', next); } catch (e) { /* ignora */ }
-      return next;
-    });
-  };
 
   React.useEffect(() => {
     base44.entities.AppSettings.list('-created_date', 1).then(s => {
@@ -152,6 +139,18 @@ export default function ManualOrder({ categories, products, comandaTemplates, pr
 
   const total = cart.reduce((s, i) => s + i.price * i.quantity, 0);
 
+  // Chiude da sola la schermata di conferma quando la stampa è davvero
+  // terminata (evento "afterprint" del browser) — niente tasto "Chiudi" da
+  // premere a mano dopo aver stampato. L'anteprima resta visibile come prima.
+  const handlePrintAndClose = (onDone) => {
+    const cleanup = () => {
+      window.removeEventListener('afterprint', cleanup);
+      onDone();
+    };
+    window.addEventListener('afterprint', cleanup);
+    window.print();
+  };
+
   const handleConfirm = async () => {
     if (!tableNumber.trim()) {
       toast({ title: t('tableNumberRequired'), variant: 'destructive' });
@@ -208,9 +207,9 @@ export default function ManualOrder({ categories, products, comandaTemplates, pr
     <div className="grid lg:grid-cols-[1fr_380px] gap-4">
       {/* Product grid */}
       <div className="space-y-3">
-        <div className="flex items-center gap-1.5">
-          <div className="flex gap-1.5 overflow-x-auto pb-1 flex-1">
-            {viewMode === 'tabs' && categories.map(cat => (
+        {viewMode === 'tabs' && (
+          <div className="flex gap-1.5 overflow-x-auto pb-1">
+            {categories.map(cat => (
               <button
                 key={cat.id}
                 onClick={() => setActiveCat(cat.id)}
@@ -223,14 +222,7 @@ export default function ManualOrder({ categories, products, comandaTemplates, pr
               </button>
             ))}
           </div>
-          <button
-            onClick={toggleViewMode}
-            className="flex-shrink-0 px-3 py-1.5 rounded-lg text-sm font-medium border bg-white hover:border-slate-400 transition"
-            title={t('toggleViewMode')}
-          >
-            {viewMode === 'tabs' ? `📜 ${t('scrollView')}` : `🗂️ ${t('tabsView')}`}
-          </button>
-        </div>
+        )}
 
         {viewMode === 'tabs' ? (
           <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
@@ -365,7 +357,7 @@ export default function ManualOrder({ categories, products, comandaTemplates, pr
           </CardHeader>
           <CardContent className="space-y-3">
             <p className="text-sm">{t('orderNumber')} <strong>{completedOrder.order_number}</strong> — {t('tableNumber2')} {completedOrder.table_number}</p>
-            <Button size="lg" className="w-full bg-slate-800 hover:bg-slate-900" onClick={() => window.print()}>
+            <Button size="lg" className="w-full bg-slate-800 hover:bg-slate-900" onClick={() => handlePrintAndClose(() => setCompletedOrder(null))}>
               <Printer className="w-5 h-5 mr-2" />
               {t('print')}
             </Button>
