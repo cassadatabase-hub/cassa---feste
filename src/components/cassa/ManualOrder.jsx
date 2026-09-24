@@ -11,30 +11,24 @@ import { formatPrice } from '@/lib/codeGen';
 import { useToast } from '@/components/ui/use-toast';
 import ComandaPrint from '@/components/cassa/ComandaPrint';
 import ReceiptPrint from '@/components/cassa/ReceiptPrint';
-import { cn } from '@/lib/utils';
+import ProductPicker from '@/components/cassa/ProductPicker';
+import { reconcileItems, describeRemoved } from '@/lib/stock';
 
 export default function ManualOrder({ categories, products, comandaTemplates, productOptions = [], viewMode = 'tabs' }) {
   const { t, tn } = useLang();
   const { toast } = useToast();
-  const [activeCat, setActiveCat] = useState(null);
   const [cart, setCart] = useState([]);
   const [tableNumber, setTableNumber] = useState('');
   const [note, setNote] = useState('');
   const [loading, setLoading] = useState(false);
   const [completedOrder, setCompletedOrder] = useState(null);
   const [festaName, setFestaName] = useState('');
-  const [optionsProduct, setOptionsProduct] = useState(null);
-  const [tempSelections, setTempSelections] = useState(/** @type {Record<string, boolean>} */ ({}));
 
   React.useEffect(() => {
     base44.entities.AppSettings.list('-created_date', 1).then(s => {
       if (s && s[0]) setFestaName(s[0].festa_name || '');
     });
   }, []);
-
-  React.useEffect(() => {
-    if (categories.length > 0 && !activeCat) setActiveCat(categories[0].id);
-  }, [categories, activeCat]);
 
   const getOption = (id) => productOptions.find(o => o.id === id);
 
@@ -77,40 +71,6 @@ export default function ManualOrder({ categories, products, comandaTemplates, pr
     });
   };
 
-  const handleOptionClick = (product) => {
-    const activeOptions = (product.option_ids || [])
-      .map(oid => getOption(oid))
-      .filter(Boolean);
-    const needsChoices = product.lactose_free_option || activeOptions.length > 0;
-    if (!needsChoices) {
-      addToCart(product, {});
-      return;
-    }
-    const defaults = { lactose_free: false };
-    activeOptions.forEach(o => { defaults[`opt_${o.id}`] = false; });
-    setTempSelections(defaults);
-    setOptionsProduct(product);
-  };
-
-  const confirmOptions = () => {
-    if (!optionsProduct) return;
-    const product = optionsProduct;
-    const lactose_free = !!tempSelections.lactose_free;
-    const selected_options = {};
-    Object.keys(tempSelections).forEach(k => {
-      if (k.startsWith('opt_')) {
-        selected_options[k.replace('opt_', '')] = !!tempSelections[k];
-      }
-    });
-    addToCart(product, { lactose_free, selected_options });
-    setOptionsProduct(null);
-    setTempSelections({});
-  };
-
-  const toggleTemp = (key, value) => {
-    setTempSelections(prev => ({ ...prev, [key]: value }));
-  };
-
   const renderOptionsInline = (item) => {
     if (!item.selected_options) return null;
     const entries = Object.entries(item.selected_options).filter(([, v]) => !!v);
@@ -129,6 +89,18 @@ export default function ManualOrder({ categories, products, comandaTemplates, pr
       </div>
     );
   };
+
+  // Se mentre il cassiere compone l'ordine un prodotto viene segnato esaurito
+  // (l'elenco prodotti si aggiorna da solo), lo togliamo dall'ordine e lo
+  // segnaliamo, così non si arriva al pagamento con prodotti non più disponibili.
+  React.useEffect(() => {
+    if (cart.length === 0) return;
+    const { items: kept, removed } = reconcileItems(cart, products);
+    if (removed.length > 0) {
+      setCart(kept);
+      toast({ title: t('soldOutRemovedTitle'), description: describeRemoved(removed, { t, tn }), variant: 'destructive' });
+    }
+  }, [products]);
 
   const updateQty = (uid, delta) => {
     setCart(prev => prev
@@ -158,6 +130,19 @@ export default function ManualOrder({ categories, products, comandaTemplates, pr
     }
     setLoading(true);
     try {
+      // Ultimo controllo sulle disponibilità aggiornate: se qualcosa è finito
+      // nel frattempo lo togliamo e chiediamo di riconfermare col nuovo totale.
+      const freshProducts = await base44.entities.Product.list('sort_order', 500);
+      const check = reconcileItems(cart, freshProducts);
+      if (check.removed.length > 0) {
+        setCart(check.items);
+        toast({
+          title: t('soldOutRemovedTitle'),
+          description: `${describeRemoved(check.removed, { t, tn })} — ${t('soldOutRecheck')}`,
+          variant: 'destructive',
+        });
+        return;
+      }
       const settings = await base44.entities.AppSettings.list('-created_date', 1);
       const items = cart.map(item => ({
         ...item,
@@ -186,107 +171,18 @@ export default function ManualOrder({ categories, products, comandaTemplates, pr
     }
   };
 
-  const filteredProducts = products.filter(p =>
-    p.category_id === activeCat &&
-    p.available !== false &&
-    !(p.stock_enabled && (p.stock_quantity ?? 0) <= 0)
-  );
-
-  // Vista a scorrimento: tutti i prodotti disponibili, raggruppati per
-  // reparto nell'ordine dei reparti stessi — niente tab da cliccare.
-  const availableProducts = products.filter(p =>
-    p.available !== false &&
-    !(p.stock_enabled && (p.stock_quantity ?? 0) <= 0)
-  );
-  const productsByCategory = categories
-    .map(cat => ({ cat, items: availableProducts.filter(p => p.category_id === cat.id) }))
-    .filter(g => g.items.length > 0);
-
   return (
     <>
     <div className="grid lg:grid-cols-[1fr_380px] gap-4">
       {/* Product grid */}
-      <div className="space-y-3">
-        {viewMode === 'tabs' && (
-          <div className="flex gap-1.5 overflow-x-auto pb-1">
-            {categories.map(cat => (
-              <button
-                key={cat.id}
-                onClick={() => setActiveCat(cat.id)}
-                className={cn(
-                  "flex-shrink-0 px-3 py-1.5 rounded-lg text-sm font-medium transition",
-                  activeCat === cat.id ? "bg-slate-800 text-white" : "bg-white border hover:border-slate-400"
-                )}
-              >
-                {cat.icon} {tn(cat.name_it, cat.name_en)}
-              </button>
-            ))}
-          </div>
-        )}
-
-        {viewMode === 'tabs' ? (
-          <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
-            {filteredProducts.map(product => {
-              const cartItems = cart.filter(i => i.product_id === product.id);
-              const totalQty = cartItems.reduce((s, i) => s + i.quantity, 0);
-              return (
-                <button
-                  key={product.id}
-                  onClick={() => handleOptionClick(product)}
-                  className={cn(
-                    "text-left p-3 rounded-lg border-2 transition relative",
-                    totalQty > 0 ? "border-orange-500 bg-orange-50" : "border-border bg-white hover:border-slate-400"
-                  )}
-                >
-                  <p className="text-sm font-medium leading-tight">{tn(product.name_it, product.name_en)}</p>
-                  <p className="text-sm font-bold text-orange-600 mt-1">{formatPrice(product.price)}</p>
-                  {totalQty > 0 && (
-                    <span className="absolute top-1.5 right-1.5 bg-orange-600 text-white text-xs font-bold rounded-full w-5 h-5 flex items-center justify-center">
-                      {totalQty}
-                    </span>
-                  )}
-                </button>
-              );
-            })}
-          </div>
-        ) : (
-          <div className="max-h-[70vh] overflow-y-auto space-y-4 pr-1">
-            {productsByCategory.map(({ cat, items }) => (
-              <div key={cat.id}>
-                <h3 className="text-sm font-extrabold text-white bg-slate-700 uppercase tracking-wide px-3 py-2 rounded-lg mb-2 sticky top-0 z-10 shadow">
-                  {cat.icon} {tn(cat.name_it, cat.name_en)}
-                </h3>
-                <div className="space-y-1.5">
-                  {items.map(product => {
-                    const cartItems = cart.filter(i => i.product_id === product.id);
-                    const totalQty = cartItems.reduce((s, i) => s + i.quantity, 0);
-                    return (
-                      <button
-                        key={product.id}
-                        onClick={() => handleOptionClick(product)}
-                        className={cn(
-                          "w-full text-left px-3 py-2.5 rounded-lg border-2 transition flex items-center justify-between gap-3",
-                          totalQty > 0 ? "border-orange-500 bg-orange-50" : "border-border bg-white hover:border-slate-400"
-                        )}
-                      >
-                        <span className="text-sm font-medium truncate">{tn(product.name_it, product.name_en)}</span>
-                        <span className="flex items-center gap-2 flex-shrink-0">
-                          <span className="text-sm font-bold text-orange-600">{formatPrice(product.price)}</span>
-                          {totalQty > 0 && (
-                            <span className="bg-orange-600 text-white text-xs font-bold rounded-full w-5 h-5 flex items-center justify-center">
-                              {totalQty}
-                            </span>
-                          )}
-                        </span>
-                      </button>
-                    );
-                  })}
-                </div>
-              </div>
-            ))}
-          </div>
-        )}
-      </div>
+      <ProductPicker
+        categories={categories}
+        products={products}
+        productOptions={productOptions}
+        viewMode={viewMode}
+        cartItems={cart}
+        onAdd={addToCart}
+      />
 
       {/* Cart sidebar */}
       <Card className="h-fit sticky top-4">
@@ -368,66 +264,6 @@ export default function ManualOrder({ categories, products, comandaTemplates, pr
         </Card>
       )}
 
-      {optionsProduct && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4" onClick={() => setOptionsProduct(null)}>
-          <div className="bg-white rounded-2xl p-6 max-w-sm w-full space-y-4" onClick={e => e.stopPropagation()}>
-            <h3 className="font-bold text-lg">{t('optionsChoice')}</h3>
-            <p className="text-sm text-muted-foreground font-medium">{tn(optionsProduct.name_it, optionsProduct.name_en)}</p>
-            <div className="space-y-3">
-              {optionsProduct.lactose_free_option && (
-                <div className="space-y-1.5">
-                  <p className="text-xs font-semibold text-slate-700">🥛 {t('lactoseFreeChoice')}</p>
-                  <div className="flex gap-2">
-                    <Button
-                      variant={tempSelections.lactose_free ? 'outline' : 'default'}
-                      className={cn('flex-1', !tempSelections.lactose_free && 'bg-slate-700 hover:bg-slate-800')}
-                      onClick={() => toggleTemp('lactose_free', false)}
-                    >
-                      {t('withLactose')}
-                    </Button>
-                    <Button
-                      variant={tempSelections.lactose_free ? 'default' : 'outline'}
-                      className={cn('flex-1', tempSelections.lactose_free ? 'bg-green-600 hover:bg-green-700 border-green-600' : 'border-green-500 text-green-600 hover:bg-green-50')}
-                      onClick={() => toggleTemp('lactose_free', true)}
-                    >
-                      {t('withoutLactose')}
-                    </Button>
-                  </div>
-                </div>
-              )}
-              {(optionsProduct.option_ids || [])
-                .map(oid => getOption(oid))
-                .filter(Boolean)
-                .map(o => (
-                  <div key={o.id} className="space-y-1.5">
-                    <p className="text-xs font-semibold text-slate-700">{o.icon} {tn(o.name_it, o.name_en)}</p>
-                    <div className="flex gap-2">
-                      <Button
-                        variant={tempSelections[`opt_${o.id}`] ? 'outline' : 'default'}
-                        className={cn('flex-1', !tempSelections[`opt_${o.id}`] && 'bg-slate-700 hover:bg-slate-800')}
-                        onClick={() => toggleTemp(`opt_${o.id}`, false)}
-                      >
-                        {t('noOption')}
-                      </Button>
-                      <Button
-                        variant={tempSelections[`opt_${o.id}`] ? 'default' : 'outline'}
-                        className={cn('flex-1', tempSelections[`opt_${o.id}`] ? 'bg-violet-600 hover:bg-violet-700 border-violet-600' : 'border-violet-500 text-violet-600 hover:bg-violet-50')}
-                        onClick={() => toggleTemp(`opt_${o.id}`, true)}
-                      >
-                        {t('yesOption')}
-                      </Button>
-                    </div>
-                  </div>
-                ))
-              }
-            </div>
-            <div className="flex gap-2 pt-2">
-              <Button variant="ghost" className="flex-1" onClick={() => setOptionsProduct(null)}>{t('cancel')}</Button>
-              <Button className="flex-1 bg-green-600 hover:bg-green-700" onClick={confirmOptions}>{t('confirm')}</Button>
-            </div>
-          </div>
-        </div>
-      )}
     </>
   );
 }

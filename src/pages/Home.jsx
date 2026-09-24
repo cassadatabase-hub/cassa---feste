@@ -11,10 +11,12 @@ import AllergenDialog from '@/components/customer/AllergenDialog';
 import FixedMenuWizard from '@/components/customer/FixedMenuWizard';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { ShoppingCart, Search, Utensils } from 'lucide-react';
+import { ShoppingCart, Search, Utensils, Pencil } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { formatPrice } from '@/lib/codeGen';
-import { getPendingOrderCode, clearPendingOrderCode } from '@/lib/pendingOrderCode';
+import { getPendingOrderCode, clearPendingOrderCode, savePendingOrderCode, getEditingOrder, saveEditingOrder, clearEditingOrder } from '@/lib/pendingOrderCode';
+import { reconcileItems, describeRemoved } from '@/lib/stock';
+import { useToast } from '@/components/ui/use-toast';
 import { base44 } from '@/api/base44Client';
 import { cn } from '@/lib/utils';
 import { Image } from '@/components/ui/image';
@@ -22,7 +24,8 @@ import { Image } from '@/components/ui/image';
 function HomeContent() {
   const { t, tn, lang } = useLang();
   const { categories, products, allergens, productOptions, fixedMenus, settings, loading } = useCatalog();
-  const { items, total, addItem } = useCart();
+  const { items, total, addItem, clearCart, replaceItems, setTableNumber, setCustomerName } = useCart();
+  const { toast } = useToast();
   const [activeCat, setActiveCat] = useState(null);
   const [search, setSearch] = useState('');
   const [cartOpen, setCartOpen] = useState(false);
@@ -34,6 +37,9 @@ function HomeContent() {
   const [tempSelections, setTempSelections] = useState(/** @type {Record<string, boolean>} */ ({}));
   const [pendingCode, setPendingCode] = useState(null);
   const [pendingCodeDetailOpen, setPendingCodeDetailOpen] = useState(false);
+  // Ordine già inviato che il cliente sta modificando (finché non è pagato)
+  const [editingOrder, setEditingOrder] = useState(() => getEditingOrder());
+  const [editBusy, setEditBusy] = useState(false);
 
   useEffect(() => {
     if (!loading && categories.length > 0 && !activeCat) {
@@ -58,6 +64,19 @@ function HomeContent() {
           if (oc && oc.status === 'consumed') {
             clearPendingOrderCode();
             setPendingCode(null);
+            // se stava modificando un ordine ormai pagato, chiudiamo la modifica
+            if (getEditingOrder()?.code === oc.code) {
+              clearEditingOrder();
+              setEditingOrder(null);
+              clearCart();
+              toast({ title: t('orderAlreadyPaidCantEdit'), variant: 'destructive' });
+            }
+          } else if (oc && oc.status === 'pending' && typeof oc.total === 'number' && oc.total !== pendingCode.total) {
+            // la cassa ha modificato l'ordine (es. prodotti esauriti tolti):
+            // aggiorniamo il totale mostrato al cliente
+            const updated = { ...pendingCode, total: oc.total };
+            savePendingOrderCode(updated);
+            setPendingCode(updated);
           }
         })
         .catch(() => { /* offline o errore di rete: riproviamo al prossimo giro */ });
@@ -65,7 +84,7 @@ function HomeContent() {
     checkStatus();
     const interval = setInterval(checkStatus, 15000);
     return () => clearInterval(interval);
-  }, [pendingCode?.code]);
+  }, [pendingCode?.code, pendingCode?.total]);
 
   useEffect(() => {
     const seen = localStorage.getItem('sagra_onboarded');
@@ -81,6 +100,64 @@ function HomeContent() {
       sessionStorage.setItem('sagra_pending_seen', '1');
     }
   }, [items.length]);
+
+  // Riporta nel carrello l'ordine già inviato (finché la cassa non lo ha
+  // pagato) per poterlo modificare; il codice resta lo stesso.
+  const startEditOrder = async () => {
+    if (!pendingCode || editBusy) return;
+    if (items.length > 0 && !editingOrder && !confirm(t('replaceCartConfirm'))) return;
+    setEditBusy(true);
+    try {
+      const results = await base44.entities.OrderCode.filter({ code: pendingCode.code, purpose: 'cassa' });
+      const oc = results && results[0];
+      if (!oc || oc.status !== 'pending') {
+        toast({ title: t('orderAlreadyPaidCantEdit'), variant: 'destructive' });
+        clearPendingOrderCode();
+        setPendingCode(null);
+        setPendingCodeDetailOpen(false);
+        return;
+      }
+      if (new Date(oc.expires_at) < new Date()) {
+        toast({ title: t('codeExpired'), variant: 'destructive' });
+        return;
+      }
+      // togliamo subito i prodotti nel frattempo esauriti
+      const fresh = await base44.entities.Product.list('sort_order', 500);
+      const { items: kept, removed } = reconcileItems(oc.cart_data?.items || [], fresh);
+      replaceItems(kept);
+      setTableNumber(oc.table_number || '');
+      setCustomerName(oc.customer_name || '');
+      const edit = { id: oc.id, code: oc.code };
+      saveEditingOrder(edit);
+      setEditingOrder(edit);
+      setPendingCodeDetailOpen(false);
+      if (removed.length > 0) {
+        toast({ title: t('soldOutRemovedTitle'), description: describeRemoved(removed, { t, tn }), variant: 'destructive' });
+      }
+      setCartOpen(true);
+    } catch (e) {
+      toast({ title: 'Errore', description: e.message, variant: 'destructive' });
+    } finally {
+      setEditBusy(false);
+    }
+  };
+
+  const cancelEditOrder = () => {
+    clearEditingOrder();
+    setEditingOrder(null);
+    clearCart();
+    setCartOpen(false);
+  };
+
+  const handleOrderUpdated = ({ alreadyPaid } = {}) => {
+    clearEditingOrder();
+    setEditingOrder(null);
+    if (alreadyPaid) {
+      clearPendingOrderCode();
+      setPendingCode(null);
+      clearCart();
+    }
+  };
 
   const handleAddToCart = (product, type = 'ala_carte') => {
     const activeOptions = (product.option_ids || [])
@@ -192,6 +269,18 @@ function HomeContent() {
           </div>
         </div>
       </header>
+
+      {editingOrder && (
+        <div className="bg-orange-100 border-b border-orange-300">
+          <div className="max-w-3xl mx-auto px-4 py-2 flex items-center justify-between gap-2 text-sm">
+            <span className="flex items-center gap-1.5 text-orange-900 min-w-0">
+              <Pencil className="w-4 h-4 flex-shrink-0" />
+              <span className="truncate">{t('editingOrderBanner')} <strong className="font-mono tracking-widest">{editingOrder.code}</strong></span>
+            </span>
+            <button className="flex-shrink-0 text-orange-900 underline font-medium" onClick={cancelEditOrder}>{t('cancelEdit')}</button>
+          </div>
+        </div>
+      )}
 
       {/* Category tabs */}
       {!search && (
@@ -330,6 +419,13 @@ function HomeContent() {
               </span>
             </button>
             <button
+              className="flex-shrink-0 text-xs font-semibold text-orange-700 border border-orange-300 rounded-lg px-2 py-1 hover:bg-orange-50 disabled:opacity-50"
+              onClick={startEditOrder}
+              disabled={editBusy}
+            >
+              {t('editOrder')}
+            </button>
+            <button
               className="text-muted-foreground hover:text-foreground text-sm px-1 flex-shrink-0"
               onClick={() => { clearPendingOrderCode(); setPendingCode(null); }}
               aria-label={t('close')}
@@ -362,7 +458,7 @@ function HomeContent() {
       )}
 
       {/* Cart drawer */}
-      <CartDrawer open={cartOpen} onOpenChange={setCartOpen} onCheckout={() => { setCartOpen(false); setCheckoutOpen(true); }} productOptions={productOptions} />
+      <CartDrawer open={cartOpen} onOpenChange={setCartOpen} onCheckout={() => { setCartOpen(false); setCheckoutOpen(true); }} productOptions={productOptions} editing={!!editingOrder} />
 
       {/* Checkout dialog */}
       <CheckoutDialog
@@ -371,6 +467,8 @@ function HomeContent() {
         onClear={() => { setCartOpen(false); }}
         onCodeGenerated={(data) => setPendingCode(data)}
         settings={settings}
+        editingOrder={editingOrder}
+        onOrderUpdated={handleOrderUpdated}
       />
 
       {/* Onboarding */}
@@ -407,6 +505,10 @@ function HomeContent() {
                 )}
               </div>
             </div>
+            <Button variant="outline" className="w-full border-orange-300 text-orange-700 hover:bg-orange-50" onClick={startEditOrder} disabled={editBusy}>
+              <Pencil className="w-4 h-4 mr-1.5" />
+              {t('editOrder')}
+            </Button>
             <div className="flex gap-2">
               <Button variant="outline" className="flex-1" onClick={() => { clearPendingOrderCode(); setPendingCode(null); setPendingCodeDetailOpen(false); }}>
                 {t('dismissCode')}

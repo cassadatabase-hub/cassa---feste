@@ -90,6 +90,11 @@ export function CartProvider({ children }) {
     setItems([]);
   }, []);
 
+  // Sostituisce tutto il carrello (usato per modificare un ordine già inviato)
+  const replaceItems = useCallback((newItems) => {
+    setItems((newItems || []).map(i => ({ ...i, uid: i.uid ?? Date.now() + Math.random() })));
+  }, []);
+
   const total = items.reduce((sum, i) => sum + i.price * i.quantity, 0);
 
   const alaCarteItems = items.filter(i => i.type === 'ala_carte');
@@ -100,7 +105,7 @@ export function CartProvider({ children }) {
 
   return (
     <CartContext.Provider value={{
-      items, addItem, updateQuantity, removeItem, clearCart,
+      items, addItem, updateQuantity, removeItem, clearCart, replaceItems,
       tableNumber, setTableNumber, customerName, setCustomerName,
       total, alaCarteItems, fixedMenuItems, drinkItems, hasPendingOrder
     }}>

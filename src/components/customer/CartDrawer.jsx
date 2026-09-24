@@ -9,7 +9,7 @@ import { useCart } from '@/lib/cart';
 import { useLang } from '@/lib/i18n';
 import { formatPrice } from '@/lib/codeGen';
 
-export default function CartDrawer({ open, onOpenChange, onCheckout, productOptions = [] }) {
+export default function CartDrawer({ open, onOpenChange, onCheckout, productOptions = [], editing = false }) {
   const { items, updateQuantity, removeItem, total, alaCarteItems, fixedMenuItems, drinkItems, tableNumber, setTableNumber } = useCart();
   const { t, tn, lang } = useLang();
 
@@ -122,7 +122,7 @@ export default function CartDrawer({ open, onOpenChange, onCheckout, productOpti
               disabled={!tableNumber.trim()}
               onClick={onCheckout}
             >
-              {t('generateCode')}
+              {editing ? t('updateOrderCode') : t('generateCode')}
             </Button>
           </SheetFooter>
         )}

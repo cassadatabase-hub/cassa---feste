@@ -1,7 +1,10 @@
-import { useState, useEffect } from 'react';
-import { base44 } from '@/api/base44Client';
+import { useState, useEffect, useCallback } from 'react';
+import { base44, supabase } from '@/api/base44Client';
 
-export function useCatalog() {
+// liveProducts: se true, l'elenco prodotti si aggiorna da solo (in tempo
+// reale via Supabase + controllo periodico di sicurezza) senza ricaricare la
+// pagina e senza mostrare lo spinner. Usato dalla cassa.
+export function useCatalog({ liveProducts = false } = {}) {
   const [categories, setCategories] = useState([]);
   const [products, setProducts] = useState([]);
   const [allergens, setAllergens] = useState([]);
@@ -43,6 +46,45 @@ export function useCatalog() {
   useEffect(() => {
     loadAll();
   }, []);
+
+  // Aggiornamento "silenzioso" dei soli prodotti: non tocca `loading`, quindi
+  // la schermata di cassa non si smonta e non si perde l'ordine in corso.
+  const refreshProducts = useCallback(async () => {
+    try {
+      const prods = await base44.entities.Product.list('sort_order', 500);
+      setProducts(prev => (JSON.stringify(prev) === JSON.stringify(prods) ? prev : (prods || [])));
+    } catch (e) {
+      // offline o errore di rete: riproviamo al prossimo giro
+    }
+  }, []);
+
+  useEffect(() => {
+    if (!liveProducts) return;
+    let debounce = null;
+    const scheduleRefresh = () => {
+      clearTimeout(debounce);
+      debounce = setTimeout(refreshProducts, 250);
+    };
+    // 1) tempo reale (richiede che la tabella products sia nella publication
+    //    supabase_realtime: vedi supabase/migrations/0002_realtime_products.sql)
+    const channel = supabase
+      .channel(`catalog-products-${Math.random().toString(36).slice(2)}`)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'products' }, scheduleRefresh)
+      .subscribe();
+    // 2) rete di sicurezza: controllo ogni 10 secondi, quando la scheda torna
+    //    visibile e quando torna la connessione
+    const interval = setInterval(refreshProducts, 10000);
+    const onVisible = () => { if (document.visibilityState === 'visible') refreshProducts(); };
+    document.addEventListener('visibilitychange', onVisible);
+    window.addEventListener('online', refreshProducts);
+    return () => {
+      clearTimeout(debounce);
+      clearInterval(interval);
+      document.removeEventListener('visibilitychange', onVisible);
+      window.removeEventListener('online', refreshProducts);
+      supabase.removeChannel(channel);
+    };
+  }, [liveProducts, refreshProducts]);
 
   return {
     categories, products, allergens, productOptions, fixedMenus, comandaTemplates, settings, feste,

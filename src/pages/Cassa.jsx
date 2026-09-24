@@ -14,7 +14,7 @@ import { Link } from 'react-router-dom';
 
 function CassaContent() {
   const { t } = useLang();
-  const { categories, products, productOptions, comandaTemplates, settings, loading } = useCatalog();
+  const { categories, products, productOptions, comandaTemplates, settings, loading } = useCatalog({ liveProducts: true });
   const [authed, setAuthed] = useState(false);
   const [pin, setPin] = useState('');
   const [error, setError] = useState(false);
@@ -124,7 +124,7 @@ function CassaContent() {
             <TabsTrigger value="history"><History className="w-4 h-4 mr-1.5" />{t('orderHistory')}</TabsTrigger>
           </TabsList>
           <TabsContent value="lookup">
-            <CodeLookup categories={categories} comandaTemplates={comandaTemplates} productOptions={productOptions} onOrderCompleted={() => setRefreshKey(k => k + 1)} />
+            <CodeLookup categories={categories} products={products} comandaTemplates={comandaTemplates} productOptions={productOptions} onOrderCompleted={() => setRefreshKey(k => k + 1)} />
           </TabsContent>
           <TabsContent value="manual">
             <ManualOrder categories={categories} products={products} comandaTemplates={comandaTemplates} productOptions={productOptions} viewMode={viewMode} />

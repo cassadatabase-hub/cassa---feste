@@ -8,10 +8,10 @@ import { useCart } from '@/lib/cart';
 import { useLang } from '@/lib/i18n';
 import { generateCode, formatPrice } from '@/lib/codeGen';
 import { savePendingOrderCode } from '@/lib/pendingOrderCode';
-import { base44 } from '@/api/base44Client';
+import { base44, supabase } from '@/api/base44Client';
 import { useToast } from '@/components/ui/use-toast';
 
-export default function CheckoutDialog({ open, onClose, onClear, onCodeGenerated, settings }) {
+export default function CheckoutDialog({ open, onClose, onClear, onCodeGenerated, settings, editingOrder = null, onOrderUpdated }) {
   const { items, total, tableNumber, customerName, setCustomerName, clearCart } = useCart();
   const { t, tn } = useLang();
   const { toast } = useToast();
@@ -22,6 +22,7 @@ export default function CheckoutDialog({ open, onClose, onClear, onCodeGenerated
   const [isTableRef, setIsTableRef] = useState(false);
   const [loading, setLoading] = useState(false);
   const [copied, setCopied] = useState(false);
+  const [wasUpdate, setWasUpdate] = useState(false);
 
   const expiryHours = settings?.code_expiry_hours || 4;
 
@@ -34,20 +35,48 @@ export default function CheckoutDialog({ open, onClose, onClear, onCodeGenerated
       const allItems = [...items, ...importedItems];
       const allTotal = total + importedOrders.reduce((s, o) => s + o.total, 0);
       const cartData = { items: allItems, total: allTotal, customer_name: customerName };
-      await base44.entities.OrderCode.create({
-        code,
-        cart_data: cartData,
-        table_number: tableNumber,
-        customer_name: customerName,
-        total: allTotal,
-        status: 'pending',
-        expires_at: expiresAt,
-        purpose: 'cassa',
-      });
+      if (editingOrder) {
+        // Modifica di un ordine già inviato: aggiorniamo lo stesso codice, ma
+        // solo se la cassa non lo ha ancora pagato.
+        const { data, error } = await supabase
+          .from('order_codes')
+          .update({
+            cart_data: cartData,
+            table_number: tableNumber,
+            customer_name: customerName,
+            total: allTotal,
+            expires_at: expiresAt,
+          })
+          .eq('id', editingOrder.id)
+          .eq('status', 'pending')
+          .select('id')
+          .maybeSingle();
+        if (error) throw error;
+        if (!data) {
+          toast({ title: t('orderAlreadyPaidCantEdit'), variant: 'destructive' });
+          onOrderUpdated?.({ alreadyPaid: true });
+          onClose();
+          return;
+        }
+        code = editingOrder.code;
+        setWasUpdate(true);
+      } else {
+        await base44.entities.OrderCode.create({
+          code,
+          cart_data: cartData,
+          table_number: tableNumber,
+          customer_name: customerName,
+          total: allTotal,
+          status: 'pending',
+          expires_at: expiresAt,
+          purpose: 'cassa',
+        });
+      }
       setGeneratedCode(code);
       const pending = { code, table_number: tableNumber, total: allTotal, customer_name: customerName };
       savePendingOrderCode(pending);
       onCodeGenerated?.(pending);
+      if (editingOrder) onOrderUpdated?.({ alreadyPaid: false });
     } catch (e) {
       toast({ title: 'Errore', description: e.message, variant: 'destructive' });
     } finally {
@@ -131,6 +160,7 @@ export default function CheckoutDialog({ open, onClose, onClear, onCodeGenerated
       setShareCode(null);
       setIsTableRef(false);
       setImportedOrders([]);
+      setWasUpdate(false);
       onClear?.();
     }
     onClose();
@@ -220,13 +250,14 @@ export default function CheckoutDialog({ open, onClose, onClear, onCodeGenerated
                 <span>{formatPrice(mergedTotal)}</span>
               </div>
               <Button size="lg" className="w-full bg-orange-600 hover:bg-orange-700" onClick={handleGenerateCode} disabled={loading}>
-                {t('generateCode')}
+                {editingOrder ? t('updateOrderCode') : t('generateCode')}
               </Button>
             </div>
           </div>
         ) : (
           <div className="text-center space-y-6 py-4">
             <div>
+              {wasUpdate && <p className="text-sm font-semibold text-green-700 mb-1">{t('orderUpdated')}</p>}
               <p className="text-sm text-muted-foreground mb-2">{t('codeInstructions')}</p>
               <div className="bg-gradient-to-br from-orange-500 to-orange-600 text-white rounded-2xl p-8">
                 <p className="text-xs uppercase tracking-widest opacity-80 mb-2">{t('yourCode')}</p>

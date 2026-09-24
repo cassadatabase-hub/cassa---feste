@@ -37,3 +37,27 @@ export function clearPendingOrderCode() {
     // ignora
   }
 }
+
+
+// Ordine (già inviato, non ancora pagato) che il cliente sta modificando.
+// Salvato per non perderlo se la pagina viene ricaricata durante la modifica:
+// così, al momento di rigenerare il codice, aggiorniamo lo STESSO ordine
+// invece di crearne uno nuovo.
+const EDIT_KEY = 'sagra_editing_order';
+
+export function saveEditingOrder({ id, code }) {
+  try { localStorage.setItem(EDIT_KEY, JSON.stringify({ id, code })); } catch (e) { /* ignora */ }
+}
+
+export function getEditingOrder() {
+  try {
+    const raw = localStorage.getItem(EDIT_KEY);
+    return raw ? JSON.parse(raw) : null;
+  } catch (e) {
+    return null;
+  }
+}
+
+export function clearEditingOrder() {
+  try { localStorage.removeItem(EDIT_KEY); } catch (e) { /* ignora */ }
+}
