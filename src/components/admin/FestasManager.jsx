@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { base44 } from '@/api/base44Client';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -7,87 +7,139 @@ import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { useLang } from '@/lib/i18n';
 import { useToast } from '@/components/ui/use-toast';
-import { Plus, CheckCircle, Calendar, Trash2, HardDriveUpload } from 'lucide-react';
+import { Plus, CheckCircle, Calendar, Trash2, HardDriveUpload, Pencil, SlidersHorizontal, Check } from 'lucide-react';
 import { formatDate } from '@/lib/codeGen';
 import { generateAndUploadFestaReport } from '@/lib/reportUtils';
+import { THEME_PRESETS, DEFAULT_THEME_COLOR, isValidHex } from '@/lib/theme';
 
-export default function FestasManager({ settings, reload }) {
+const emptyForm = () => ({ name: '', start_date: '', end_date: '', notes: '', theme_color: DEFAULT_THEME_COLOR });
+
+function ColorPicker({ value, onChange }) {
+  const { t } = useLang();
+  const isPreset = THEME_PRESETS.some(p => p.color.toLowerCase() === (value || '').toLowerCase());
+  return (
+    <div>
+      <Label>{t('themeColor')}</Label>
+      <div className="flex flex-wrap items-center gap-2 mt-1.5">
+        {THEME_PRESETS.map(p => {
+          const selected = p.color.toLowerCase() === (value || '').toLowerCase();
+          return (
+            <button
+              key={p.color}
+              type="button"
+              title={p.name}
+              aria-label={p.name}
+              onClick={() => onChange(p.color)}
+              className={`w-8 h-8 rounded-full flex items-center justify-center border-2 ${selected ? 'border-slate-900' : 'border-white shadow-sm ring-1 ring-slate-200'}`}
+              style={{ backgroundColor: p.color }}
+            >
+              {selected && <Check className="w-4 h-4 text-white" />}
+            </button>
+          );
+        })}
+        <label
+          className={`flex items-center gap-1.5 text-xs rounded-full border px-2 h-8 cursor-pointer ${!isPreset ? 'border-slate-900' : ''}`}
+        >
+          <input
+            type="color"
+            value={isValidHex(value) ? value : DEFAULT_THEME_COLOR}
+            onChange={e => onChange(e.target.value)}
+            className="w-5 h-5 p-0 border-0 bg-transparent cursor-pointer"
+          />
+          {t('customColor')}
+        </label>
+      </div>
+    </div>
+  );
+}
+
+// Tabelle con dati legati alla festa
+const FESTA_TABLES = ['categories', 'products', 'fixed_menus', 'comanda_templates'];
+
+export default function FestasManager({ settings, feste, managedFestaId, onManage, reload }) {
   const { t } = useLang();
   const { toast } = useToast();
-  const [feste, setFeste] = useState([]);
-  const [loading, setLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);
-  const [form, setForm] = useState({ name: '', start_date: '', end_date: '', notes: '' });
+  const [editingId, setEditingId] = useState(null);
+  const [form, setForm] = useState(emptyForm());
   const [archivingId, setArchivingId] = useState(null);
 
-  const loadFeste = async () => {
-    setLoading(true);
-    try {
-      const all = await base44.entities.Festa.list('-created_date', 100);
-      setFeste(all || []);
-    } catch (e) {
-      console.error(e);
-    } finally {
-      setLoading(false);
+  const liveId = settings?.active_festa_id || '';
+
+  const setLive = async (festa) => {
+    // Un solo "sipario" alzato: la festa attiva vista da clienti e cassa
+    await base44.entities.Festa.update(festa.id, { status: 'active' });
+    if (settings?.id) {
+      await base44.entities.AppSettings.update(settings.id, { active_festa_id: festa.id, festa_name: festa.name });
+    } else {
+      await base44.entities.AppSettings.create({ active_festa_id: festa.id, festa_name: festa.name, cassa_pin: '1234' });
     }
   };
 
-  useEffect(() => { loadFeste(); }, []);
+  // Prima festa in assoluto: i dati già presenti (senza festa) diventano suoi
+  const adoptOrphans = async (festaId) => {
+    try {
+      for (const table of FESTA_TABLES) {
+        await base44.supabase.from(table).update({ festa_id: festaId }).is('festa_id', null);
+      }
+    } catch (e) {
+      console.error('adoptOrphans', e);
+    }
+  };
 
-  const handleCreate = async () => {
+  const resetForm = () => {
+    setForm(emptyForm());
+    setEditingId(null);
+    setShowForm(false);
+  };
+
+  const handleSubmit = async () => {
     if (!form.name.trim()) return;
     try {
-      // Archive all currently active feste
-      const activeFeste = feste.filter(f => f.status === 'active');
-      await Promise.all(activeFeste.map(f =>
-        base44.entities.Festa.update(f.id, { status: 'archived' })
-      ));
-      // Create the new festa as active
-      const newFesta = await base44.entities.Festa.create({
-        ...form,
-        status: 'active',
-      });
-      // Set as active in settings
-      if (settings?.id) {
-        await base44.entities.AppSettings.update(settings.id, {
-          active_festa_id: newFesta.id,
-          festa_name: newFesta.name,
-        });
+      const payload = { ...form, name: form.name.trim() };
+      if (editingId) {
+        await base44.entities.Festa.update(editingId, payload);
+        if (editingId === liveId && settings?.id) {
+          await base44.entities.AppSettings.update(settings.id, { festa_name: payload.name });
+        }
+        toast({ title: t('festaSaved') });
       } else {
-        await base44.entities.AppSettings.create({
-          active_festa_id: newFesta.id,
-          festa_name: newFesta.name,
-          cassa_pin: '1234',
-        });
+        const isFirst = feste.length === 0;
+        const created = await base44.entities.Festa.create({ ...payload, status: 'active' });
+        if (isFirst) await adoptOrphans(created.id);
+        // La prima festa (o se nessuna è in vendita) va subito in vendita;
+        // le altre si preparano con calma e si mettono in vendita dopo.
+        if (isFirst || !liveId) {
+          await setLive(created);
+          toast({ title: t('festaCreated') });
+        } else {
+          toast({ title: t('festaSaved') });
+        }
+        onManage?.(created.id);
       }
-      toast({ title: t('festaCreated') });
-      setForm({ name: '', start_date: '', end_date: '', notes: '' });
-      setShowForm(false);
-      loadFeste();
+      resetForm();
       reload?.();
     } catch (e) {
       toast({ title: 'Errore', description: e.message, variant: 'destructive' });
     }
   };
 
+  const handleEdit = (festa) => {
+    setEditingId(festa.id);
+    setForm({
+      name: festa.name || '',
+      start_date: festa.start_date || '',
+      end_date: festa.end_date || '',
+      notes: festa.notes || '',
+      theme_color: isValidHex(festa.theme_color) ? festa.theme_color : DEFAULT_THEME_COLOR,
+    });
+    setShowForm(true);
+  };
+
   const handleActivate = async (festa) => {
     try {
-      // Archive all currently active feste
-      const activeFeste = feste.filter(f => f.status === 'active' && f.id !== festa.id);
-      await Promise.all(activeFeste.map(f =>
-        base44.entities.Festa.update(f.id, { status: 'archived' })
-      ));
-      // Set this one as active
-      await base44.entities.Festa.update(festa.id, { status: 'active' });
-      // Update settings
-      if (settings?.id) {
-        await base44.entities.AppSettings.update(settings.id, {
-          active_festa_id: festa.id,
-          festa_name: festa.name,
-        });
-      }
-      toast({ title: t('festaActivated') });
-      loadFeste();
+      await setLive(festa);
+      toast({ title: t('festaLiveToast').replace('{name}', festa.name) });
       reload?.();
     } catch (e) {
       toast({ title: 'Errore', description: e.message, variant: 'destructive' });
@@ -97,10 +149,10 @@ export default function FestasManager({ settings, reload }) {
   const handleArchive = async (festa) => {
     setArchivingId(festa.id);
     try {
-      // Auto-upload report to Google Drive before archiving
+      // Report su Google Drive prima di archiviare
       let driveResult = null;
       try {
-        const cats = await base44.entities.Category.list('sort_order', 100);
+        const cats = await base44.entities.Category.list('sort_order', 200);
         driveResult = await generateAndUploadFestaReport(festa.id, festa.name, cats || [], t);
       } catch (e) {
         console.error('Drive upload error', e);
@@ -108,10 +160,7 @@ export default function FestasManager({ settings, reload }) {
 
       await base44.entities.Festa.update(festa.id, { status: 'archived' });
       if (settings?.active_festa_id === festa.id && settings?.id) {
-        await base44.entities.AppSettings.update(settings.id, {
-          active_festa_id: '',
-          festa_name: '',
-        });
+        await base44.entities.AppSettings.update(settings.id, { active_festa_id: '', festa_name: '' });
       }
 
       if (driveResult?.success) {
@@ -121,7 +170,6 @@ export default function FestasManager({ settings, reload }) {
       } else {
         toast({ title: t('festaArchived') });
       }
-      loadFeste();
       reload?.();
     } catch (e) {
       toast({ title: 'Errore', description: e.message, variant: 'destructive' });
@@ -131,36 +179,36 @@ export default function FestasManager({ settings, reload }) {
   };
 
   const handleDelete = async (festa) => {
-    if (!confirm(`${t('delete')} "${festa.name}"?`)) return;
+    if (!confirm(`${t('delete')} "${festa.name}"?\n\nVerranno eliminati anche i suoi reparti, prodotti e menu. Gli ordini già registrati restano nei report.`)) return;
     try {
+      for (const entity of ['FixedMenu', 'Product', 'Category', 'ComandaTemplate']) {
+        await base44.entities[entity].deleteMany({ festa_id: festa.id });
+      }
       await base44.entities.Festa.delete(festa.id);
       if (settings?.active_festa_id === festa.id && settings?.id) {
         await base44.entities.AppSettings.update(settings.id, { active_festa_id: '', festa_name: '' });
       }
-      loadFeste();
       reload?.();
     } catch (e) {
       toast({ title: 'Errore', description: e.message, variant: 'destructive' });
     }
   };
 
-  if (loading) {
-    return <div className="flex justify-center py-8"><div className="w-6 h-6 border-2 border-slate-200 border-t-slate-800 rounded-full animate-spin" /></div>;
-  }
-
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
         <h2 className="text-lg font-bold">{t('festeManagement')}</h2>
-        <Button onClick={() => setShowForm(!showForm)}>
+        <Button onClick={() => { if (showForm) resetForm(); else { setForm(emptyForm()); setEditingId(null); setShowForm(true); } }}>
           <Plus className="w-4 h-4 mr-1" />
           {t('newFesta')}
         </Button>
       </div>
+      <p className="text-sm text-muted-foreground">{t('festaHowItWorks')}</p>
 
       {showForm && (
         <Card>
           <CardContent className="pt-4 space-y-3 max-w-md">
+            <h3 className="font-semibold">{editingId ? t('editFesta') : t('newFesta')}</h3>
             <div>
               <Label>{t('festaName')}</Label>
               <Input value={form.name} onChange={e => setForm({ ...form, name: e.target.value })} placeholder={t('festaNamePlaceholder')} />
@@ -179,10 +227,10 @@ export default function FestasManager({ settings, reload }) {
               <Label>{t('notes')}</Label>
               <Input value={form.notes} onChange={e => setForm({ ...form, notes: e.target.value })} />
             </div>
-            <p className="text-xs text-muted-foreground">{t('festaNameHint')}</p>
+            <ColorPicker value={form.theme_color} onChange={c => setForm({ ...form, theme_color: c })} />
             <div className="flex gap-2">
-              <Button onClick={handleCreate} className="flex-1">{t('create')}</Button>
-              <Button variant="outline" onClick={() => setShowForm(false)}>{t('cancel')}</Button>
+              <Button onClick={handleSubmit} className="flex-1">{editingId ? t('save') : t('create')}</Button>
+              <Button variant="outline" onClick={resetForm}>{t('cancel')}</Button>
             </div>
           </CardContent>
         </Card>
@@ -193,16 +241,22 @@ export default function FestasManager({ settings, reload }) {
       ) : (
         <div className="space-y-2">
           {feste.map(festa => {
-            const isActiveSelected = settings?.active_festa_id === festa.id;
+            const isLive = liveId === festa.id;
+            const isManaged = managedFestaId === festa.id;
             return (
-              <Card key={festa.id} className={isActiveSelected ? 'border-green-500' : ''}>
+              <Card key={festa.id} className={isLive ? 'border-green-500' : isManaged ? 'border-slate-400' : ''}>
                 <CardContent className="py-3">
-                  <div className="flex items-center justify-between gap-2">
+                  <div className="flex items-center justify-between gap-2 flex-wrap">
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2 flex-wrap">
+                        <span
+                          className="w-4 h-4 rounded-full flex-shrink-0 ring-1 ring-slate-200"
+                          style={{ backgroundColor: isValidHex(festa.theme_color) ? festa.theme_color : DEFAULT_THEME_COLOR }}
+                        />
                         <span className="font-bold">{festa.name}</span>
-                        {isActiveSelected && <Badge className="bg-green-600">{t('activeFesta')}</Badge>}
-                        {festa.status === 'archived' && !isActiveSelected && <Badge variant="secondary">{t('archivedFesta')}</Badge>}
+                        {isLive && <Badge className="bg-green-600">{t('liveFesta')}</Badge>}
+                        {isManaged && <Badge variant="outline">{t('managing')}</Badge>}
+                        {festa.status === 'archived' && !isLive && <Badge variant="secondary">{t('archivedFesta')}</Badge>}
                       </div>
                       <div className="flex items-center gap-2 text-xs text-muted-foreground mt-1">
                         <Calendar className="w-3 h-3" />
@@ -211,14 +265,20 @@ export default function FestasManager({ settings, reload }) {
                       </div>
                       {festa.notes && <p className="text-xs text-muted-foreground mt-1">{festa.notes}</p>}
                     </div>
-                    <div className="flex gap-1 shrink-0">
-                      {!isActiveSelected && (
-                        <Button size="sm" variant="outline" onClick={() => handleActivate(festa)}>
-                          <CheckCircle className="w-3.5 h-3.5 mr-1" />
-                          {t('activate')}
+                    <div className="flex gap-1 flex-wrap shrink-0">
+                      {!isManaged && (
+                        <Button size="sm" variant="outline" onClick={() => onManage?.(festa.id)}>
+                          <SlidersHorizontal className="w-3.5 h-3.5 mr-1" />
+                          {t('manage')}
                         </Button>
                       )}
-                      {isActiveSelected && (
+                      {!isLive && (
+                        <Button size="sm" variant="outline" onClick={() => handleActivate(festa)}>
+                          <CheckCircle className="w-3.5 h-3.5 mr-1" />
+                          {t('setLive')}
+                        </Button>
+                      )}
+                      {isLive && (
                         <Button size="sm" variant="outline" onClick={() => handleArchive(festa)} disabled={archivingId === festa.id}>
                           {archivingId === festa.id ? (
                             <>
@@ -233,6 +293,9 @@ export default function FestasManager({ settings, reload }) {
                           )}
                         </Button>
                       )}
+                      <Button size="sm" variant="ghost" onClick={() => handleEdit(festa)}>
+                        <Pencil className="w-3.5 h-3.5" />
+                      </Button>
                       <Button size="sm" variant="ghost" onClick={() => handleDelete(festa)}>
                         <Trash2 className="w-3.5 h-3.5 text-destructive" />
                       </Button>

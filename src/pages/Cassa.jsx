@@ -14,7 +14,7 @@ import { Link } from 'react-router-dom';
 
 function CassaContent() {
   const { t } = useLang();
-  const { categories, products, productOptions, comandaTemplates, settings, loading } = useCatalog({ liveProducts: true });
+  const { categories, products, productOptions, comandaTemplates, settings, activeFesta, noActiveFesta, loading } = useCatalog({ liveProducts: true });
   const [authed, setAuthed] = useState(false);
   const [pin, setPin] = useState('');
   const [error, setError] = useState(false);
@@ -95,6 +95,7 @@ function CassaContent() {
         <div className="max-w-6xl mx-auto px-4 py-3 flex items-center justify-between">
           <div className="flex items-center gap-3">
             <h1 className="text-lg font-bold">{t('cassa')}</h1>
+            {activeFesta && <span className="text-xs font-semibold text-orange-700 bg-orange-100 rounded-full px-2 py-0.5">{activeFesta.name}</span>}
             <span className="text-xs text-muted-foreground hidden sm:inline">{new Date().toLocaleDateString('it-IT', { weekday: 'long', day: 'numeric', month: 'long' })}</span>
           </div>
           <div className="flex items-center gap-3">
@@ -117,6 +118,11 @@ function CassaContent() {
       </header>
 
       <main className="max-w-6xl mx-auto px-4 py-4">
+        {noActiveFesta && (
+          <div className="mb-4 rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-900">
+            {t('noActiveFesta')}
+          </div>
+        )}
         <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
           <TabsList className="grid grid-cols-3 mb-4">
             <TabsTrigger value="lookup"><Search className="w-4 h-4 mr-1.5" />{t('lookupCode')}</TabsTrigger>

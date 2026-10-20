@@ -23,7 +23,7 @@ import { Image } from '@/components/ui/image';
 
 function HomeContent() {
   const { t, tn, lang } = useLang();
-  const { categories, products, allergens, productOptions, fixedMenus, settings, loading } = useCatalog();
+  const { categories, products, allergens, productOptions, fixedMenus, settings, activeFesta, noActiveFesta, loading } = useCatalog();
   const { items, total, addItem, clearCart, replaceItems, setTableNumber, setCustomerName } = useCart();
   const { toast } = useToast();
   const [activeCat, setActiveCat] = useState(null);
@@ -229,6 +229,24 @@ function HomeContent() {
     );
   }
 
+  // Nessuna festa in vendita: i clienti non vedono né menu né ordini
+  if (noActiveFesta) {
+    return (
+      <div className="min-h-screen flex flex-col items-center justify-center gap-3 bg-gray-50 p-6 text-center">
+        <div className="w-14 h-14 rounded-full bg-gradient-to-br from-orange-500 to-red-500 flex items-center justify-center">
+          <Utensils className="w-7 h-7 text-white" />
+        </div>
+        <h1 className="text-lg font-bold">{t('noLiveTitle')}</h1>
+        <p className="text-sm text-muted-foreground max-w-xs">{t('noLiveText')}</p>
+        <div className="flex items-center gap-2 pt-2">
+          <LanguageToggle />
+          <Link to="/cassa" className="px-2 py-1 text-xs font-medium text-muted-foreground hover:text-foreground border rounded-lg">{t('cassa')}</Link>
+          <Link to="/admin" className="px-2 py-1 text-xs font-medium text-muted-foreground hover:text-foreground border rounded-lg">{t('admin')}</Link>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-screen bg-gray-50 pb-24">
       {/* Header */}
@@ -239,7 +257,7 @@ function HomeContent() {
               <Utensils className="w-5 h-5 text-white" />
             </div>
             <div>
-              <h1 className="text-base font-bold leading-tight">{settings?.festa_name || t('appName')}</h1>
+              <h1 className="text-base font-bold leading-tight">{activeFesta?.name || settings?.festa_name || t('appName')}</h1>
               <p className="text-xs text-muted-foreground leading-tight">{t('tagline')}</p>
             </div>
           </div>

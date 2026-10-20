@@ -10,7 +10,7 @@ import { useLang } from '@/lib/i18n';
 import { useToast } from '@/components/ui/use-toast';
 import { formatPrice } from '@/lib/codeGen';
 
-export default function FixedMenusManager({ fixedMenus, products, categories, reload }) {
+export default function FixedMenusManager({ festaId, fixedMenus, products, categories, reload }) {
   const { t, tn } = useLang();
   const { toast } = useToast();
   const [editing, setEditing] = useState(null);
@@ -23,7 +23,7 @@ export default function FixedMenusManager({ fixedMenus, products, categories, re
       if (editing) {
         await base44.entities.FixedMenu.update(editing, form);
       } else {
-        await base44.entities.FixedMenu.create(form);
+        await base44.entities.FixedMenu.create({ ...form, festa_id: festaId });
       }
       setEditing(null);
       setForm(emptyForm);

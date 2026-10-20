@@ -1,4 +1,7 @@
 /** @type {import('tailwindcss').Config} */
+// Le classi orange-* seguono il colore scelto per la festa (vedi src/lib/theme.js)
+const brand = (shade) => `rgb(var(--brand-${shade}) / <alpha-value>)`;
+
 module.exports = {
     darkMode: ["class"],
     content: ["./index.html", "./src/**/*.{ts,tsx,js,jsx}"],
@@ -10,6 +13,10 @@ module.exports = {
   			sm: 'calc(var(--radius) - 4px)'
   		},
   		colors: {
+  			orange: {
+  				50: brand(50), 100: brand(100), 200: brand(200), 300: brand(300), 400: brand(400),
+  				500: brand(500), 600: brand(600), 700: brand(700), 800: brand(800), 900: brand(900)
+  			},
   			background: 'hsl(var(--background))',
   			foreground: 'hsl(var(--foreground))',
   			card: {

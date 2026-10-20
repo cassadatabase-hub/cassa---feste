@@ -10,7 +10,7 @@ import { Trash2, ArrowUp, ArrowDown } from 'lucide-react';
 import { useLang } from '@/lib/i18n';
 import { useToast } from '@/components/ui/use-toast';
 
-export default function ComandaTemplatesManager({ templates, categories, reload }) {
+export default function ComandaTemplatesManager({ festaId, templates, categories, reload }) {
   const { t, tn } = useLang();
   const { toast } = useToast();
   const [editing, setEditing] = useState(null);
@@ -23,7 +23,7 @@ export default function ComandaTemplatesManager({ templates, categories, reload 
       if (editing) {
         await base44.entities.ComandaTemplate.update(editing, form);
       } else {
-        await base44.entities.ComandaTemplate.create(form);
+        await base44.entities.ComandaTemplate.create({ ...form, festa_id: festaId });
       }
       setEditing(null);
       setForm(emptyForm);
