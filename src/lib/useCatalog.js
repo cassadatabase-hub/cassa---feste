@@ -16,7 +16,7 @@ import { applyTheme, DEFAULT_THEME_COLOR } from '@/lib/theme';
 // reale via Supabase + controllo periodico di sicurezza) senza ricaricare la
 // pagina e senza mostrare lo spinner. Usato dalla cassa. Se nel frattempo
 // l'admin cambia la festa attiva, la cassa ricarica tutto il catalogo.
-export function useCatalog({ liveProducts = false, festaId = null } = {}) {
+export function useCatalog({ liveProducts = false, watchActiveFesta = false, festaId = null } = {}) {
   const [rawCategories, setRawCategories] = useState([]);
   const [rawProducts, setRawProducts] = useState([]);
   const [allergens, setAllergens] = useState([]);
@@ -117,6 +117,32 @@ export function useCatalog({ liveProducts = false, festaId = null } = {}) {
       // offline o errore di rete: riproviamo al prossimo giro
     }
   }, [loadAll]);
+
+  // Pagina clienti: ogni 20 secondi (e quando la scheda torna visibile) legge
+  // UNA sola riga di impostazioni; il catalogo si ricarica solo se l'admin ha
+  // cambiato la festa in vendita.
+  const checkActiveFesta = useCallback(async () => {
+    try {
+      const sets = await base44.entities.AppSettings.list('-created_date', 1);
+      const newActive = (sets && sets[0] && sets[0].active_festa_id) || '';
+      if (newActive !== activeFestaRef.current) await loadAll({ silent: true });
+    } catch (e) {
+      // offline: riproviamo al prossimo giro
+    }
+  }, [loadAll]);
+
+  useEffect(() => {
+    if (!watchActiveFesta || liveProducts) return;
+    const interval = setInterval(checkActiveFesta, 20000);
+    const onVisible = () => { if (document.visibilityState === 'visible') checkActiveFesta(); };
+    document.addEventListener('visibilitychange', onVisible);
+    window.addEventListener('online', checkActiveFesta);
+    return () => {
+      clearInterval(interval);
+      document.removeEventListener('visibilitychange', onVisible);
+      window.removeEventListener('online', checkActiveFesta);
+    };
+  }, [watchActiveFesta, liveProducts, checkActiveFesta]);
 
   useEffect(() => {
     if (!liveProducts) return;

@@ -3,7 +3,7 @@ import { base44, supabase } from '@/api/base44Client';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Search, AlertCircle, CheckCircle, Printer, Plus, Minus, Trash2, PlusCircle, ChevronUp } from 'lucide-react';
+import { Search, AlertCircle, CheckCircle, Printer, Plus, Minus, Trash2, PlusCircle, ChevronUp, Gift, Undo2 } from 'lucide-react';
 import { useLang } from '@/lib/i18n';
 import { formatPrice } from '@/lib/codeGen';
 import { useToast } from '@/components/ui/use-toast';
@@ -11,6 +11,9 @@ import ComandaPrint from '@/components/cassa/ComandaPrint';
 import ReceiptPrint from '@/components/cassa/ReceiptPrint';
 import ProductPicker from '@/components/cassa/ProductPicker';
 import { reconcileItems, describeRemoved, itemsTotal, optionsMatch } from '@/lib/stock';
+import { giftOne, ungiftOne, canGift } from '@/lib/gifts';
+import { savePaymentMethod } from '@/lib/payments';
+import PaymentMethodPicker from '@/components/cassa/PaymentMethodPicker';
 
 // Le righe salvate potrebbero non avere un uid: glielo diamo per poterle
 // modificare in modo affidabile.
@@ -27,6 +30,7 @@ export default function CodeLookup({ categories, products = [], comandaTemplates
   const [loading, setLoading] = useState(false);
   const [showPrint, setShowPrint] = useState(false);
   const [paidOrder, setPaidOrder] = useState(null);
+  const [paymentMethod, setPaymentMethod] = useState('cash');
   const [paidNotice, setPaidNotice] = useState('');
   const [festaName, setFestaName] = useState('');
   const [showPicker, setShowPicker] = useState(false);
@@ -152,6 +156,7 @@ export default function CodeLookup({ categories, products = [], comandaTemplates
   const addProduct = (product, opts = {}) => {
     const { lactose_free = false, selected_options = {} } = opts;
     const existing = items.find(i =>
+      !i.gifted &&
       i.product_id === product.id &&
       (i.type === 'ala_carte' || !i.type) &&
       !!i.lactose_free === lactose_free &&
@@ -248,7 +253,19 @@ export default function CodeLookup({ categories, products = [], comandaTemplates
         consumed_at: new Date().toISOString(),
       });
 
-      setPaidOrder(cashierOrder);
+      // metodo di pagamento (contanti/POS) salvato sull'ordine; gli ordini a
+      // totale 0 (tutto omaggio) non hanno un metodo
+      let savedOrder = cashierOrder;
+      if (total > 0) {
+        try {
+          savedOrder = await savePaymentMethod(cashierOrder, paymentMethod);
+        } catch (err) {
+          toast({ title: t('paymentNotSaved'), description: err.message, variant: 'destructive' });
+          savedOrder = { ...cashierOrder, payment_method: paymentMethod };
+        }
+      }
+      setPaidOrder(savedOrder);
+      setPaymentMethod('cash');
       setPaidNotice(notice);
       setShowPrint(true);
       setOrderCode(null);
@@ -357,6 +374,7 @@ export default function CodeLookup({ categories, products = [], comandaTemplates
                 <div key={item.uid} className="flex items-center justify-between gap-2 px-3 py-2 text-sm">
                   <div className="flex-1 min-w-0">
                     <p className="font-medium">{tn(item.name_it, item.name_en) || item.name}</p>
+                    {item.gifted && <p className="text-xs text-amber-600 font-medium">🎁 {t('giftLabel')}</p>}
                     {item.lactose_free && <p className="text-xs text-green-600 font-medium">🥛 {t('withoutLactoseLabel')}</p>}
                     {renderOptionsInline(item)}
                     {item.type === 'fixed_menu' && (item.menu_items || []).length > 0 && (
@@ -370,6 +388,17 @@ export default function CodeLookup({ categories, products = [], comandaTemplates
                   <div className="flex items-center gap-1 flex-shrink-0">
                     {item.type !== 'fixed_menu' ? (
                       <>
+                        {(item.gifted || canGift(item)) && (
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className={`h-7 w-7 ${item.gifted ? 'text-slate-500' : 'text-amber-600'}`}
+                            title={item.gifted ? t('ungiftOne') : t('giftOne')}
+                            onClick={() => applyItems(item.gifted ? ungiftOne(items, item.uid) : giftOne(items, item.uid))}
+                          >
+                            {item.gifted ? <Undo2 className="w-3.5 h-3.5" /> : <Gift className="w-3.5 h-3.5" />}
+                          </Button>
+                        )}
                         <Button variant="outline" size="icon" className="h-7 w-7" onClick={() => updateQty(item.uid, -1)}>
                           <Minus className="w-3 h-3" />
                         </Button>
@@ -385,7 +414,7 @@ export default function CodeLookup({ categories, products = [], comandaTemplates
                       <Trash2 className="w-3.5 h-3.5" />
                     </Button>
                   </div>
-                  <span className="font-medium flex-shrink-0 w-16 text-right">{formatPrice((item.price || 0) * (item.quantity || 1))}</span>
+                  <span className="font-medium flex-shrink-0 w-16 text-right">{item.gifted ? '🎁' : formatPrice((item.price || 0) * (item.quantity || 1))}</span>
                 </div>
               ))}
             </div>
@@ -407,6 +436,7 @@ export default function CodeLookup({ categories, products = [], comandaTemplates
               </div>
             )}
 
+            {total > 0 && <PaymentMethodPicker value={paymentMethod} onChange={setPaymentMethod} />}
             <div className="flex justify-between font-bold text-lg border-t pt-3">
               <span>{t('total')}</span>
               <span>{formatPrice(total)}</span>

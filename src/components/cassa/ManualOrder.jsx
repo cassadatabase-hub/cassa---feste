@@ -5,7 +5,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Plus, Minus, CheckCircle, Printer } from 'lucide-react';
+import { Plus, Minus, CheckCircle, Printer, Gift, Undo2 } from 'lucide-react';
 import { useLang } from '@/lib/i18n';
 import { formatPrice } from '@/lib/codeGen';
 import { useToast } from '@/components/ui/use-toast';
@@ -13,6 +13,9 @@ import ComandaPrint from '@/components/cassa/ComandaPrint';
 import ReceiptPrint from '@/components/cassa/ReceiptPrint';
 import ProductPicker from '@/components/cassa/ProductPicker';
 import { reconcileItems, describeRemoved } from '@/lib/stock';
+import { giftOne, ungiftOne, canGift } from '@/lib/gifts';
+import { savePaymentMethod } from '@/lib/payments';
+import PaymentMethodPicker from '@/components/cassa/PaymentMethodPicker';
 
 export default function ManualOrder({ categories, products, comandaTemplates, productOptions = [], viewMode = 'tabs' }) {
   const { t, tn } = useLang();
@@ -22,6 +25,7 @@ export default function ManualOrder({ categories, products, comandaTemplates, pr
   const [note, setNote] = useState('');
   const [loading, setLoading] = useState(false);
   const [completedOrder, setCompletedOrder] = useState(null);
+  const [paymentMethod, setPaymentMethod] = useState('cash');
   const [festaName, setFestaName] = useState('');
 
   React.useEffect(() => {
@@ -43,13 +47,15 @@ export default function ManualOrder({ categories, products, comandaTemplates, pr
     const { lactose_free = false, selected_options = {} } = opts;
     setCart(prev => {
       const existing = prev.find(i =>
+      !i.gifted &&
       i.product_id === product.id &&
       i.lactose_free === lactose_free &&
       optionsMatch(i.selected_options, selected_options)
     );
       if (existing) {
         return prev.map(i =>
-          i.product_id === product.id &&
+          !i.gifted &&
+      i.product_id === product.id &&
           i.lactose_free === lactose_free &&
           optionsMatch(i.selected_options, selected_options)
             ? { ...i, quantity: i.quantity + 1 }
@@ -159,7 +165,19 @@ export default function ManualOrder({ categories, products, comandaTemplates, pr
         p_festa_id: settings?.[0]?.active_festa_id || '',
       });
       if (error) throw error;
-      setCompletedOrder(order);
+      // metodo di pagamento (contanti/POS) salvato sull'ordine; gli ordini a
+      // totale 0 (tutto omaggio) non hanno un metodo
+      let savedOrder = order;
+      if (total > 0) {
+        try {
+          savedOrder = await savePaymentMethod(order, paymentMethod);
+        } catch (err) {
+          toast({ title: t('paymentNotSaved'), description: err.message, variant: 'destructive' });
+          savedOrder = { ...order, payment_method: paymentMethod };
+        }
+      }
+      setCompletedOrder(savedOrder);
+      setPaymentMethod('cash');
       setCart([]);
       setTableNumber('');
       setNote('');
@@ -198,10 +216,22 @@ export default function ManualOrder({ categories, products, comandaTemplates, pr
                 <div key={item.uid} className="flex items-center justify-between gap-2 py-1.5 border-b">
                   <div className="flex-1 min-w-0">
                     <span className="text-sm block truncate">{tn(item.name_it, item.name_en)}</span>
+                    {item.gifted && <span className="text-xs text-amber-600 font-medium">🎁 {t('giftLabel')}</span>}
                     {item.lactose_free && <span className="text-xs text-green-600 font-medium">🥛 {t('withoutLactoseLabel')}</span>}
                     {renderOptionsInline(item)}
                   </div>
                   <div className="flex items-center gap-1">
+                    {(item.gifted || canGift(item)) && (
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className={`h-6 w-6 ${item.gifted ? 'text-slate-500' : 'text-amber-600'}`}
+                        title={item.gifted ? t('ungiftOne') : t('giftOne')}
+                        onClick={() => setCart(prev => (item.gifted ? ungiftOne(prev, item.uid) : giftOne(prev, item.uid)))}
+                      >
+                        {item.gifted ? <Undo2 className="w-3.5 h-3.5" /> : <Gift className="w-3.5 h-3.5" />}
+                      </Button>
+                    )}
                     <Button variant="outline" size="icon" className="h-6 w-6" onClick={() => updateQty(item.uid, -1)}>
                       <Minus className="w-3 h-3" />
                     </Button>
@@ -210,7 +240,7 @@ export default function ManualOrder({ categories, products, comandaTemplates, pr
                       <Plus className="w-3 h-3" />
                     </Button>
                   </div>
-                  <span className="text-sm font-medium w-16 text-right">{formatPrice(item.price * item.quantity)}</span>
+                  <span className="text-sm font-medium w-16 text-right">{item.gifted ? '🎁' : formatPrice(item.price * item.quantity)}</span>
                 </div>
               ))}
             </div>
@@ -228,6 +258,7 @@ export default function ManualOrder({ categories, products, comandaTemplates, pr
                   <Textarea value={note} onChange={e => setNote(e.target.value)} placeholder="..." className="text-sm min-h-[40px]" />
                 </div>
               </div>
+              {total > 0 && <PaymentMethodPicker value={paymentMethod} onChange={setPaymentMethod} />}
               <div className="flex justify-between font-bold text-lg border-t pt-2">
                 <span>{t('total')}</span>
                 <span>{formatPrice(total)}</span>

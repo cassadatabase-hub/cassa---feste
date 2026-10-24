@@ -3,7 +3,7 @@ import { base44 } from '@/api/base44Client';
 import * as XLSX from 'xlsx';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
-import { Download, HardDriveUpload, ChevronDown, ChevronRight, Euro, Receipt, CalendarDays, Trash2 } from 'lucide-react';
+import { Download, HardDriveUpload, ChevronDown, ChevronRight, Euro, Receipt, CalendarDays, Trash2, Gift } from 'lucide-react';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useLang } from '@/lib/i18n';
 import { formatPrice, formatDate } from '@/lib/codeGen';
@@ -67,8 +67,10 @@ export default function DailyReport({ categories, settings, reload }) {
     try {
       if (selectedFestaId && selectedFestaId !== 'all') {
         await base44.entities.CashierOrder.deleteMany({ status: 'paid', festa_id: selectedFestaId });
+        await base44.entities.Festa.update(selectedFestaId, { next_order_number: 1 });
       } else {
         await base44.entities.CashierOrder.deleteMany({ status: 'paid' });
+        await Promise.all(feste.map(f => base44.entities.Festa.update(f.id, { next_order_number: 1 })));
       }
       if (settings?.id) {
         await base44.entities.AppSettings.update(settings.id, { next_order_number: 1 });
@@ -157,6 +159,59 @@ export default function DailyReport({ categories, settings, reload }) {
       </div>
 
       <Card>
+        <CardContent className="py-3">
+          <p className="text-xs font-semibold text-muted-foreground uppercase mb-1">{t('paymentByMethod')}</p>
+          <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+            <div>
+              <p className="text-xs text-muted-foreground">{t('paymentCash')} · {report.payments.cash.count} {t('orders')}</p>
+              <p className="text-lg font-bold">{formatPrice(report.payments.cash.total)}</p>
+            </div>
+            <div>
+              <p className="text-xs text-muted-foreground">{t('paymentPos')} · {report.payments.pos.count} {t('orders')}</p>
+              <p className="text-lg font-bold">{formatPrice(report.payments.pos.total)}</p>
+            </div>
+            {report.hasUnknownPayment && (
+              <div>
+                <p className="text-xs text-muted-foreground">{t('paymentUnknown')} · {report.payments.unknown.count} {t('orders')}</p>
+                <p className="text-lg font-bold">{formatPrice(report.payments.unknown.total)}</p>
+              </div>
+            )}
+          </div>
+        </CardContent>
+      </Card>
+
+      {report.giftsQuantity > 0 && (
+        <Card>
+          <CardContent className="py-3">
+            <p className="text-xs font-semibold text-muted-foreground uppercase mb-1 flex items-center gap-1.5">
+              <Gift className="w-3.5 h-3.5 text-amber-600" />
+              {t('giftsReport')}
+            </p>
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b text-left text-xs text-muted-foreground">
+                  <th className="py-1">{t('product')}</th>
+                  <th className="py-1 text-right">{t('quantity')}</th>
+                </tr>
+              </thead>
+              <tbody>
+                {Object.entries(report.gifts).sort((a, b) => b[1].quantity - a[1].quantity).map(([name, g]) => (
+                  <tr key={name} className="border-b">
+                    <td className="py-1">{name}</td>
+                    <td className="py-1 text-right font-medium">{g.quantity}</td>
+                  </tr>
+                ))}
+                <tr>
+                  <td className="py-1 font-semibold">{t('giftsTotal')}</td>
+                  <td className="py-1 text-right font-bold">{report.giftsQuantity}</td>
+                </tr>
+              </tbody>
+            </table>
+          </CardContent>
+        </Card>
+      )}
+
+      <Card>
         <CardContent className="py-3 space-y-2">
           <p className="text-xs font-semibold text-muted-foreground">{t('selectFesta')}</p>
           <Select value={selectedFestaId} onValueChange={setSelectedFestaId}>
@@ -222,6 +277,11 @@ export default function DailyReport({ categories, settings, reload }) {
 
                 {isExpanded && (
                   <div className="mt-3 space-y-3">
+                    <p className="text-xs text-muted-foreground">
+                      {t('paymentCash')}: <strong>{formatPrice(dayData.payments.cash.total)}</strong>
+                      {' · '}{t('paymentPos')}: <strong>{formatPrice(dayData.payments.pos.total)}</strong>
+                      {dayData.payments.unknown.count > 0 && <> · {t('paymentUnknown')}: <strong>{formatPrice(dayData.payments.unknown.total)}</strong></>}
+                    </p>
                     <div>
                       <p className="text-xs font-semibold text-muted-foreground uppercase mb-1">{t('perCategory')}</p>
                       <table className="w-full text-sm">

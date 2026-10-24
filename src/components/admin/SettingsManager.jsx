@@ -14,7 +14,6 @@ export default function SettingsManager({ settings, reload }) {
     cassa_pin: settings?.cassa_pin || '1234',
     admin_pin: settings?.admin_pin || '9999',
     code_expiry_hours: settings?.code_expiry_hours || 4,
-    next_order_number: settings?.next_order_number || 1,
     festa_name: settings?.festa_name || '',
   });
 
@@ -50,10 +49,6 @@ export default function SettingsManager({ settings, reload }) {
         <div>
           <Label>{t('codeExpiry')}</Label>
           <Input type="number" value={form.code_expiry_hours} onChange={e => setForm({ ...form, code_expiry_hours: Number(e.target.value) })} />
-        </div>
-        <div>
-          <Label>{t('orderNumber')} (prossimo)</Label>
-          <Input type="number" value={form.next_order_number} onChange={e => setForm({ ...form, next_order_number: Number(e.target.value) })} />
         </div>
         <Button onClick={handleSave} className="w-full">{t('save')}</Button>
       </CardContent>

@@ -12,16 +12,32 @@ export function computeReport(orders, categories) {
   orders.forEach(order => {
     const dayKey = getDayKey(order.created_date);
     if (!byDay[dayKey]) {
-      byDay[dayKey] = { date: dayKey, orders: [], total: 0, products: {}, categories: {} };
+      byDay[dayKey] = {
+        date: dayKey, orders: [], total: 0, products: {}, categories: {}, gifts: {},
+        payments: { cash: { count: 0, total: 0 }, pos: { count: 0, total: 0 }, unknown: { count: 0, total: 0 } },
+      };
     }
     byDay[dayKey].orders.push(order);
     byDay[dayKey].total += order.total || 0;
+    // Incasso per metodo di pagamento (gli ordini tutti in omaggio, a totale 0, non contano)
+    const method = order.payment_method === 'cash' || order.payment_method === 'pos' ? order.payment_method : 'unknown';
+    if (method !== 'unknown' || (order.total || 0) > 0) {
+      byDay[dayKey].payments[method].count += 1;
+      byDay[dayKey].payments[method].total += order.total || 0;
+    }
     (order.items || []).forEach(item => {
       const name = item.name_it || item.name || 'N/D';
       const cat = categories.find(c => c.id === item.category_id);
       const catName = cat ? cat.name_it : 'Senza reparto';
       const catOrder = cat ? (cat.sort_order ?? 999) : 999;
       const qty = item.quantity || 1;
+      // Omaggi: scalano dalle scorte ma non sono vendite; vanno nella loro tabella
+      if (item.gifted) {
+        const gifts = byDay[dayKey].gifts;
+        if (!gifts[name]) gifts[name] = { quantity: 0, category: catName, catOrder };
+        gifts[name].quantity += qty;
+        return;
+      }
       const rev = (item.price || 0) * qty;
       if (!byDay[dayKey].products[name]) byDay[dayKey].products[name] = { quantity: 0, revenue: 0, category: catName, catOrder };
       byDay[dayKey].products[name].quantity += qty;
@@ -34,7 +50,23 @@ export function computeReport(orders, categories) {
   const days = Object.keys(byDay).sort((a, b) => b.localeCompare(a));
   const grandTotal = days.reduce((s, d) => s + byDay[d].total, 0);
   const totalOrders = days.reduce((s, d) => s + byDay[d].orders.length, 0);
-  return { byDay, days, grandTotal, totalOrders };
+
+  const payments = { cash: { count: 0, total: 0 }, pos: { count: 0, total: 0 }, unknown: { count: 0, total: 0 } };
+  const gifts = {};
+  days.forEach(d => {
+    ['cash', 'pos', 'unknown'].forEach(m => {
+      payments[m].count += byDay[d].payments[m].count;
+      payments[m].total += byDay[d].payments[m].total;
+    });
+    Object.entries(byDay[d].gifts).forEach(([name, g]) => {
+      if (!gifts[name]) gifts[name] = { quantity: 0, category: g.category, catOrder: g.catOrder };
+      gifts[name].quantity += g.quantity;
+    });
+  });
+  const giftsQuantity = Object.values(gifts).reduce((s, g) => s + g.quantity, 0);
+  // ordini vecchi (senza metodo di pagamento): mostriamo la colonna "non indicato" solo se serve
+  const hasUnknownPayment = payments.unknown.count > 0;
+  return { byDay, days, grandTotal, totalOrders, payments, gifts, giftsQuantity, hasUnknownPayment };
 }
 
 // Formato numerico italiano: virgola per i decimali, punto per le migliaia, simbolo €.
@@ -53,18 +85,24 @@ function setColumnEuroFormat(ws, colIndex, rowCount) {
 }
 
 export function buildWorkbook(report, t) {
-  const { byDay, days, grandTotal, totalOrders } = report;
+  const { byDay, days, grandTotal, totalOrders, payments, gifts, giftsQuantity, hasUnknownPayment } = report;
   const wb = XLSX.utils.book_new();
 
   // --- Riepilogo giornaliero ---
+  // Incasso diviso per metodo di pagamento (contanti / POS)
+  const paymentCols = (p) => [p.cash.total, p.pos.total, ...(hasUnknownPayment ? [p.unknown.total] : [])];
   const summaryRows = [
-    [t('date'), t('orderCount'), t('revenue') + ' (€)'],
-    ...days.map(d => [d, byDay[d].orders.length, byDay[d].total]),
-    ['', '', ''],
-    [t('grandTotal'), totalOrders, grandTotal],
+    [
+      t('date'), t('orderCount'), t('revenue') + ' (€)',
+      t('paymentCash') + ' (€)', t('paymentPos') + ' (€)',
+      ...(hasUnknownPayment ? [t('paymentUnknown') + ' (€)'] : []),
+    ],
+    ...days.map(d => [d, byDay[d].orders.length, byDay[d].total, ...paymentCols(byDay[d].payments)]),
+    [],
+    [t('grandTotal'), totalOrders, grandTotal, ...paymentCols(payments)],
   ];
   const summaryWs = XLSX.utils.aoa_to_sheet(summaryRows);
-  setColumnEuroFormat(summaryWs, 2, summaryRows.length);
+  for (let c = 2; c < summaryRows[0].length; c++) setColumnEuroFormat(summaryWs, c, summaryRows.length);
   XLSX.utils.book_append_sheet(wb, summaryWs, t('dailyReport'));
 
   // --- Per prodotto: raggruppato per reparto, un blocco sotto l'altro ---
@@ -118,8 +156,19 @@ export function buildWorkbook(report, t) {
   setColumnEuroFormat(catsWs, 3, catRows.length);
   XLSX.utils.book_append_sheet(wb, catsWs, t('perCategory'));
 
+  // --- Omaggi: prodotto e quanti sono stati dati in omaggio ---
+  if (giftsQuantity > 0) {
+    const giftRows = [[t('product'), t('quantity')]];
+    Object.entries(gifts)
+      .sort(([, a], [, b]) => (a.catOrder - b.catOrder) || b.quantity - a.quantity)
+      .forEach(([name, g]) => giftRows.push([name, g.quantity]));
+    giftRows.push([]);
+    giftRows.push([t('giftsTotal'), giftsQuantity]);
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(giftRows), t('giftsReport'));
+  }
+
   // --- Dettaglio ordini ---
-  const detailRows = [[t('date'), t('time'), t('orderNumber'), t('tableNumber2'), t('note'), t('total') + ' (€)']];
+  const detailRows = [[t('date'), t('time'), t('orderNumber'), t('tableNumber2'), t('note'), t('total') + ' (€)', t('paymentMethod')]];
   days.forEach(d => {
     byDay[d].orders.forEach(o => {
       detailRows.push([
@@ -129,6 +178,7 @@ export function buildWorkbook(report, t) {
         o.table_number || '',
         o.note || '',
         o.total || 0,
+        o.payment_method === 'pos' ? t('paymentPos') : o.payment_method === 'cash' ? t('paymentCash') : '',
       ]);
     });
   });

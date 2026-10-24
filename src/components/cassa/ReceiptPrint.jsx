@@ -69,7 +69,7 @@ export default function ReceiptPrint({ order, festaName, productOptions = [] }) 
           <div key={i} className="flex justify-between" style={{ marginBottom: '1px' }}>
             <span className="flex-1">{item.quantity}x {itemDisplayName(item)}</span>
             <span className="ml-2" style={{ fontWeight: '500' }}>
-              {formatPrice((item.price || 0) * (item.quantity || 1))}
+              {item.gifted ? 'OMAGGIO' : formatPrice((item.price || 0) * (item.quantity || 1))}
             </span>
           </div>
         ))}
@@ -80,6 +80,12 @@ export default function ReceiptPrint({ order, festaName, productOptions = [] }) 
           <span>TOTALE</span>
           <span>{formatPrice(total)}</span>
         </div>
+        {order.payment_method && (
+          <div className="flex justify-between" style={{ fontSize: '10pt' }}>
+            <span>Pagamento</span>
+            <span>{order.payment_method === 'pos' ? 'POS' : 'Contanti'}</span>
+          </div>
+        )}
       </div>
 
       <div

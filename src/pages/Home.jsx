@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { LanguageProvider, useLang } from '@/lib/i18n';
 import { CartProvider, useCart } from '@/lib/cart';
 import { useCatalog } from '@/lib/useCatalog';
@@ -23,7 +23,7 @@ import { Image } from '@/components/ui/image';
 
 function HomeContent() {
   const { t, tn, lang } = useLang();
-  const { categories, products, allergens, productOptions, fixedMenus, settings, activeFesta, noActiveFesta, loading } = useCatalog();
+  const { categories, products, allergens, productOptions, fixedMenus, settings, activeFesta, noActiveFesta, loading } = useCatalog({ watchActiveFesta: true });
   const { items, total, addItem, clearCart, replaceItems, setTableNumber, setCustomerName } = useCart();
   const { toast } = useToast();
   const [activeCat, setActiveCat] = useState(null);
@@ -40,6 +40,24 @@ function HomeContent() {
   // Ordine già inviato che il cliente sta modificando (finché non è pagato)
   const [editingOrder, setEditingOrder] = useState(() => getEditingOrder());
   const [editBusy, setEditBusy] = useState(false);
+
+  // Se l'admin cambia la festa in vendita mentre il cliente ha la pagina
+  // aperta, il menu si aggiorna da solo e il carrello (con prodotti della
+  // festa precedente) viene svuotato.
+  const lastFestaRef = useRef(undefined);
+  useEffect(() => {
+    if (loading) return;
+    const id = activeFesta?.id || '';
+    if (lastFestaRef.current !== undefined && lastFestaRef.current !== id) {
+      clearCart();
+      clearEditingOrder();
+      setEditingOrder(null);
+      setActiveCat(null);
+      toast({ title: t('festaChangedMenu') });
+    }
+    lastFestaRef.current = id;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [loading, activeFesta?.id]);
 
   useEffect(() => {
     if (!loading && categories.length > 0 && !activeCat) {

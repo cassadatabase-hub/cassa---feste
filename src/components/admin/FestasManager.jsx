@@ -12,7 +12,7 @@ import { formatDate } from '@/lib/codeGen';
 import { generateAndUploadFestaReport } from '@/lib/reportUtils';
 import { THEME_PRESETS, DEFAULT_THEME_COLOR, isValidHex } from '@/lib/theme';
 
-const emptyForm = () => ({ name: '', start_date: '', end_date: '', notes: '', theme_color: DEFAULT_THEME_COLOR });
+const emptyForm = () => ({ name: '', start_date: '', end_date: '', notes: '', theme_color: DEFAULT_THEME_COLOR, next_order_number: 1 });
 
 function ColorPicker({ value, onChange }) {
   const { t } = useLang();
@@ -96,7 +96,7 @@ export default function FestasManager({ settings, feste, managedFestaId, onManag
   const handleSubmit = async () => {
     if (!form.name.trim()) return;
     try {
-      const payload = { ...form, name: form.name.trim() };
+      const payload = { ...form, name: form.name.trim(), next_order_number: Math.max(1, parseInt(form.next_order_number, 10) || 1) };
       if (editingId) {
         await base44.entities.Festa.update(editingId, payload);
         if (editingId === liveId && settings?.id) {
@@ -132,6 +132,7 @@ export default function FestasManager({ settings, feste, managedFestaId, onManag
       end_date: festa.end_date || '',
       notes: festa.notes || '',
       theme_color: isValidHex(festa.theme_color) ? festa.theme_color : DEFAULT_THEME_COLOR,
+      next_order_number: festa.next_order_number || 1,
     });
     setShowForm(true);
   };
@@ -226,6 +227,11 @@ export default function FestasManager({ settings, feste, managedFestaId, onManag
             <div>
               <Label>{t('notes')}</Label>
               <Input value={form.notes} onChange={e => setForm({ ...form, notes: e.target.value })} />
+            </div>
+            <div>
+              <Label>{t('nextOrderNumber')}</Label>
+              <Input type="number" min="1" value={form.next_order_number} onChange={e => setForm({ ...form, next_order_number: e.target.value })} />
+              <p className="text-xs text-muted-foreground mt-1">{t('nextOrderNumberHint')}</p>
             </div>
             <ColorPicker value={form.theme_color} onChange={c => setForm({ ...form, theme_color: c })} />
             <div className="flex gap-2">

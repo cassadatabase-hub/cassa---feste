@@ -20,7 +20,7 @@ export default function OrderHistory({ categories, comandaTemplates, productOpti
   const getOption = (id) => productOptions.find(o => o.id === id);
 
   const itemSummary = (item) => {
-    let s = `${item.quantity}x ${item.name_it || item.name}`;
+    let s = `${item.quantity}x ${item.name_it || item.name}${item.gifted ? ' (OMAGGIO)' : ''}`;
     const extras = [];
     if (item.lactose_free) extras.push('Senza Lattosio');
     if (item.selected_options) {
@@ -157,6 +157,7 @@ export default function OrderHistory({ categories, comandaTemplates, productOpti
                       <p className="text-xs text-muted-foreground">
                         {order.mode === 'code' ? `📎 ${t('modeCode')}` : `✍️ ${t('modeManual')}`}
                         {order.code && ` · ${order.code}`}
+                        {order.payment_method && ` · ${order.payment_method === 'pos' ? 'POS' : t('paymentCash')}`}
                         {order.note && ` · ${order.note}`}
                       </p>
                       <p className="text-xs text-muted-foreground">
